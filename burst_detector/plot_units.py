@@ -11,7 +11,7 @@ from burst_detector.schemas import PlotUnitsParams
 
 
 def main() -> None:
-    args = bd.parse_args()
+    args = bd.parse_cmd_line_args()
     schema = PlotUnitsParams(unknown=EXCLUDE)
     params = schema.load(args)
 
