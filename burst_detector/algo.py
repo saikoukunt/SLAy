@@ -59,14 +59,19 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         params["post_samples"],
     )
 
-    # update group to noise if counts < min_spikes
-    cl_labels.loc[counts < params["min_spikes"], "group"] = "noise"
-
-    # Get cluster_ids labeled good
-    good_ids = cl_labels[cl_labels["group"].isin(params["good_lbls"])].index
-
-    cl_good = np.zeros(n_clust, dtype=bool)
-    cl_good[good_ids] = True
+    ## TODO: revert this change and fill gaps in cl_labels
+    cl_good: NDArray[np.bool_] = np.zeros(n_clust, dtype=bool)
+    unique: NDArray[np.int_] = np.unique(clusters)
+    for cl in range(n_clust):
+        if (
+            (cl in unique)
+            and (counts[cl] > params["min_spikes"])
+            and (
+                cl_labels.loc[cl_labels["cluster_id"] == cl, "group"].item()
+                in params["good_lbls"]
+            )
+        ):
+            cl_good[cl] = True
 
     mean_wf, std_wf, spikes = bd.calc_mean_and_std_wf(
         params, n_clust, good_ids, times_multi, data, return_spikes=True
