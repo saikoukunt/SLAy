@@ -83,9 +83,15 @@ class KSParams(Schema):
         description="Datatype of words in recording binary",
     )
     sample_rate = Float(
-        required=True, description="Sampling frequency of the recording"
+        required=True, 
+        missing=30000, 
+        description="Sampling frequency of the recording"
     )
-    n_chan = Integer(required=True, description="Number of channels in the recording")
+    n_chan = Integer(
+        required=True, 
+        missing=385,
+        description="Number of channels in the recording"
+    )
     offset = Integer(requred=False, description="Offset of the recording")
     hp_filtered = Boolean(
         required=False, description="True if recording is high-pass filtered"
