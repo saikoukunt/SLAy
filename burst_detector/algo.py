@@ -69,7 +69,13 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     cl_good[good_ids] = True
 
     mean_wf, std_wf, spikes = bd.calc_mean_and_std_wf(
-        params, n_clust, good_ids, times_multi, data, return_spikes=True
+        params,
+        n_clust,
+        good_ids,
+        times_multi,
+        data,
+        return_std=params["plot_merges"],
+        return_spikes=True,
     )
 
     peak_chans = np.argmax(np.max(mean_wf, 2) - np.min(mean_wf, 2), 1)

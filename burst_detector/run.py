@@ -2,8 +2,6 @@ import json
 import os
 from typing import Any
 
-from marshmallow import EXCLUDE
-
 import burst_detector as bd
 from burst_detector.schemas import OutputParams, RunParams
 

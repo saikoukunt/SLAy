@@ -207,6 +207,7 @@ def calc_mean_and_std_wf(
     cluster_ids: list[int],
     spike_times: list[NDArray[np.int_]],
     data: NDArray[np.int_],
+    return_std: bool = True,
     return_spikes: bool = False,
 ) -> tuple[NDArray, NDArray, dict[int, NDArray]]:
     """
@@ -230,9 +231,17 @@ def calc_mean_and_std_wf(
     std_wf_path = os.path.join(params["KS_folder"], "std_waveforms.npy")
 
     spikes = {}
-    if os.path.exists(mean_wf_path) and os.path.exists(std_wf_path):
+    if os.path.exists(mean_wf_path) and (not return_std or os.path.exists(std_wf_path)):
         mean_wf = np.load(mean_wf_path)
-        std_wf = np.load(std_wf_path)
+        try:
+            std_wf = np.load(std_wf_path)
+        except FileNotFoundError:
+            std_wf = np.array([])
+        if np.any(np.isnan(mean_wf)):
+            mean_wf = np.nan_to_num(mean_wf, nan=0)
+            # save the fixed mean waveform
+            np.save(mean_wf_path, mean_wf)
+            
         if return_spikes:
             # Extracting spikes is faster than saving and loading them from file
             for i in tqdm(cluster_ids, desc="Loading spikes"):
@@ -265,9 +274,10 @@ def calc_mean_and_std_wf(
                 params["post_samples"],
                 params["max_spikes"],
             )
-            spikes_cp = cp.array(spikes[i])
-            mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
-            std_wf[i, :, :] = cp.std(spikes_cp, axis=0)
+            if len(spikes[i]) > 0:  # edge case
+                spikes_cp = cp.array(spikes[i])
+                mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
+                std_wf[i, :, :] = cp.std(spikes_cp, axis=0)
 
         logger.info("Saving mean and std waveforms...")
         cp.save(mean_wf_path, mean_wf)

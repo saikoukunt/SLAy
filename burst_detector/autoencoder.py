@@ -132,13 +132,13 @@ class SpikeDataset(Dataset):
         self,
         spikes: torch.Tensor,
         labels: NDArray[np.int_],
-        transform: Callable | None = None,
-        target_transform: Callable | None = None,
+        transform: Callable = None,
+        target_transform: Callable = None,
     ) -> None:
         self.spikes: torch.Tensor = spikes
         self.labels: NDArray[np.int_] = labels
-        self.transform: Callable | None = transform
-        self.target_transform: Callable | None = target_transform
+        self.transform: Callable = transform
+        self.target_transform: Callable = target_transform
 
     def __len__(self) -> int:
         return self.spikes.shape[0]
@@ -304,7 +304,7 @@ def train_ae(
     pre_samples: int = 10,
     post_samples: int = 30,
     do_shft: bool = False,
-    model: CN_AE | None = None,
+    model: CN_AE = None,
 ) -> tuple[CN_AE, SpikeDataset]:
     """
     Creates and trains an autoencoder on the given spike dataset.
