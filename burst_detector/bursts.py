@@ -91,7 +91,7 @@ def find_sequence(
     spike_times: NDArray[np.float_],
     state_ratio: float,
     gamma: float,
-    frs: NDArray[np.float_] | None = None,
+    frs: NDArray[np.float_] = None,
 ) -> tuple[NDArray[np.int_], NDArray[np.float_]]:
     """
     Infers the optimal state sequence of Kleinberg HMM bursting states.
