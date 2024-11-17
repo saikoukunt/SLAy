@@ -4,6 +4,7 @@ from typing import Tuple
 
 import numpy as np
 import pandas as pd
+from marshmallow import EXCLUDE
 from numpy.typing import NDArray
 from scipy import signal, stats
 from tqdm import tqdm
@@ -105,7 +106,13 @@ def main(args: dict = None) -> None:
     cl_good[good_ids] = True
 
     mean_wf, _, _ = bd.calc_mean_and_std_wf(
-        params, n_clust, good_ids, times_multi, data, return_std=False, return_spikes=False
+        params,
+        n_clust,
+        good_ids,
+        times_multi,
+        data,
+        return_std=False,
+        return_spikes=False,
     )
 
     logger.info("Calculating background standard deviation...")

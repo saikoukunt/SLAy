@@ -66,7 +66,7 @@ def generate_train_data(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Pre-compute the set of closest channels for each channel.
-    good_ids = np.unique(ci["good_ids"])
+    good_ids = np.argwhere(ci["good_ids"]).flatten()
     chans = {}
     for id in good_ids:
         chs, peak = bd.find_best_channels(

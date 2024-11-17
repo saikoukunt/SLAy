@@ -1,6 +1,6 @@
 import os
 
-from marshmallow import Schema
+from marshmallow import INCLUDE, Schema
 from marshmallow.fields import Boolean, Field, Float, Integer, List, String
 
 
@@ -83,15 +83,9 @@ class KSParams(Schema):
         description="Datatype of words in recording binary",
     )
     sample_rate = Float(
-        required=True, 
-        missing=30000, 
-        description="Sampling frequency of the recording"
+        required=True, description="Sampling frequency of the recording"
     )
-    n_chan = Integer(
-        required=True, 
-        missing=385,
-        description="Number of channels in the recording"
-    )
+    n_chan = Integer(required=True, description="Number of channels in the recording")
     offset = Integer(requred=False, description="Offset of the recording")
     hp_filtered = Boolean(
         required=False, description="True if recording is high-pass filtered"
@@ -255,6 +249,9 @@ class SimilarityParams(Schema):
 
 
 class PlotParams(Schema):
+    class Meta:
+        unknown = INCLUDE
+
     plot_corr_window_size = Float(
         required=False,
         missing=0.102,
@@ -273,10 +270,16 @@ class PlotParams(Schema):
 
 
 class CustomMetricsParams(KSParams, WaveformParams):
+    class Meta:
+        unknown = INCLUDE
+
     pass
 
 
 class PlotUnitsParams(KSParams, WaveformParams, PlotParams, CorrelogramParams):
+    class Meta:
+        unknown = INCLUDE
+
     pass
 
 
@@ -288,6 +291,9 @@ class RunParams(
     SimilarityParams,
     PlotParams,
 ):
+    class Meta:
+        unknown = INCLUDE
+
     output_json = InputFile(
         required=False,
         missing=None,
@@ -308,6 +314,11 @@ class RunParams(
         required=False,
         missing=False,
         description="True if merges should be plotted",
+    )
+    auto_accept_merges = Boolean(
+        required=False,
+        missing=False,
+        description="True if merges should be accepted",
     )
 
 

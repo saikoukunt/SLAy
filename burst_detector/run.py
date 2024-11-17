@@ -8,9 +8,11 @@ from burst_detector.schemas import OutputParams, RunParams
 
 def main(args: dict = None) -> None:
     args = bd.parse_kilosort_params(args)
-    schema = RunParams(unknown=EXCLUDE)
+    schema = RunParams()
     params = schema.load(args)
-    mst, xct, rpt, mt, tt, num_merge, oc = bd.run_merge(params)
+    vals, mst, xct, rpt, mt, tt, num_merge, oc = bd.run_merge(params)
+    if params["auto_accept_merges"]:
+        bd.stages.accept_all_merges(vals, params)
 
     output: dict[str, Any] = {
         "mean_time": mst,

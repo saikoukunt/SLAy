@@ -13,6 +13,7 @@ from typing import Any
 import cupy as cp
 import numpy as np
 from numpy.typing import NDArray
+from scipy import stats
 from scipy.stats import wasserstein_distance
 from tqdm import tqdm
 
@@ -102,21 +103,12 @@ def find_times_multi(
     Returns:
         cl_times (list): found cluster spike times.
     """
-    # Initialize the returned list and map cluster id to list index
-    cl_times: list = []
-    cl_to_ind: dict[int, int] = {}
-    for i in range(len(clust_ids)):
-        cl_times.append([])
-        cl_to_ind[clust_ids[i]] = i
-
+    n_clust = np.max(clust_ids) + 1
+    cl_times = [[] for _ in range(n_clust)]
     for i in range(sp_times.shape[0]):
         time = sp_times[i]
-        if (
-            sp_clust[i] in cl_to_ind
-            and time >= pre_samples
-            and time < data.shape[0] - post_samples
-        ):
-            cl_times[cl_to_ind[sp_clust[i]]].append(time)
+        if time >= pre_samples and time < data.shape[0] - post_samples:
+            cl_times[sp_clust[i]].append(time)
     for i in range(len(cl_times)):
         cl_times[i] = np.array(cl_times[i])
     return cl_times
@@ -241,7 +233,7 @@ def calc_mean_and_std_wf(
             mean_wf = np.nan_to_num(mean_wf, nan=0)
             # save the fixed mean waveform
             np.save(mean_wf_path, mean_wf)
-            
+
         if return_spikes:
             # Extracting spikes is faster than saving and loading them from file
             for i in tqdm(cluster_ids, desc="Loading spikes"):
@@ -286,6 +278,57 @@ def calc_mean_and_std_wf(
         mean_wf = cp.asnumpy(mean_wf)
         std_wf = cp.asnumpy(std_wf)
     return mean_wf, std_wf, spikes
+
+
+def calc_sliding_RP_viol(
+    times_multi: list[NDArray[np.float_]],
+    clust_ids: NDArray[np.int_],
+    n_clust: int,
+    bin_size: float = 0.25,
+    acceptThresh: float = 0.25,
+) -> NDArray[np.float32]:
+    """
+    Calculate the sliding refractory period violation confidence for each cluster.
+    Args:
+        times_multi (list[NDArray[np.float_]]): A list of arrays containing spike times for each cluster.
+        clust_ids (NDArray[np.int_]): An array indicating cluster_ids to process. Should be "good" clusters.
+        n_clust (int): The total number of clusters (shape of mean_wf or max_clust_id + 1).
+        bin_size (float, optional): The size of each bin in milliseconds. Defaults to 0.25.
+        acceptThresh (float, optional): The threshold for accepting refractory period violations. Defaults to 0.25.
+    Returns:
+        NDArray[np.float32]: An array containing the refractory period violation confidence for each cluster.
+    """
+    b = np.arange(0, 10.25, bin_size) / 1000
+    bTestIdx = np.array([1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32, 36, 40], dtype="int8")
+    bTest = [b[i] for i in bTestIdx]  # -1 bc 0th bin corresponds to 0-0.5 ms
+
+    RP_conf = np.zeros(n_clust, dtype=np.float32)
+
+    for i in tqdm(clust_ids, desc="Calculating RP viol confs"):
+        times = times_multi[i] / 30000
+        if times.shape[0] > 1:
+            # calculate and avg halves of acg
+            acg = bd.auto_correlogram(times, 2, bin_size / 1000, 5 / 30000)
+            half_len = int(acg.shape[0] / 2)
+            acg[half_len:] = (acg[half_len:] + acg[:half_len][::-1]) / 2
+            acg = acg[half_len:]
+
+            acg_cumsum = np.cumsum(acg)
+            sum_res = acg_cumsum[bTestIdx - 1]
+
+            # calculate max violations per refractory period size
+            num_bins_2s = acg.shape[0]
+            num_bins_1s = int(num_bins_2s / 2)
+            bin_rate = np.mean(acg[num_bins_1s:num_bins_2s])
+            max_conts = np.array(bTest) / bin_size * 1000 * bin_rate * acceptThresh
+
+            # compute confidence of less than acceptThresh contamination at each refractory period
+            confs = []
+            for j, cnt in enumerate(sum_res):
+                confs.append(1 - stats.poisson.cdf(cnt, max_conts[j]))
+            RP_conf[i] = 1 - max(confs)
+
+    return RP_conf
 
 
 ### @internal

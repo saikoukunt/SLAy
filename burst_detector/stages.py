@@ -1,6 +1,9 @@
 import functools
+import itertools
+import json
 import logging
 import multiprocessing as mp
+import os
 from collections import deque
 from typing import Any, Callable
 
@@ -543,3 +546,85 @@ def ref_p_func(
             confs[j] = max(1 - cnt / max_contam[j], 1 - poisson.cdf(cnt, max_contam[j]))
 
     return 1 - confs.max(), bTest[confs.argmax()]
+
+
+def accept_all_merges(vals, params) -> None:
+    print("Auto Accepting Merges")
+    # merge suggested clusters
+    new2old = os.path.join(params["KS_folder"], "automerge", "new2old.json")
+    with open(new2old, "r") as f:
+        merges = json.load(f)
+        merges = {int(k): v for k, v in sorted(merges.items())}
+
+    cl_labels, mean_wf, n_spikes, times_multi = vals
+    for new_id, old_ids in merges.items():
+        accept_merge(cl_labels, mean_wf, n_spikes, times_multi, params, old_ids, new_id)
+
+
+def accept_merge(
+    cl_labels, mean_wf, n_spikes, times_multi, params, cluster_ids: list[int], new_id
+) -> int:
+    # TODO change old_row data to 0's?
+    # TODO current code breaks if new id isnt next in line
+    """
+    Merge clusters together into a new cluster.
+
+    Args:
+        cluster_ids (list[int]): List of cluster_ids to merge.
+        new_id (int): New cluster_id.
+
+    Returns:
+        int: New cluster_id.
+    """
+    # if new_id exists skip
+    if new_id in cl_labels["cluster_id"].values:
+        raise ValueError(f"New cluster_id {new_id} already exists")
+
+    # calculate new mean_wf and std_wf as weighted average
+    weighted_mean_wf = np.sum(
+        mean_wf[cluster_ids, :, :]
+        * (
+            n_spikes[cluster_ids][:, np.newaxis, np.newaxis]
+            / np.sum(n_spikes[cluster_ids])
+        ),
+        axis=0,
+    )
+
+    new_mean_wf = np.zeros(
+        (
+            new_id + 1,
+            params["n_chan"],
+            params["pre_samples"] + params["post_samples"],
+        )
+    )
+
+    old_rows_i = min(new_id, mean_wf.shape[0])
+    new_mean_wf[:old_rows_i, :, :] = mean_wf[:old_rows_i, :, :]  # If get partial save
+    new_mean_wf[new_id, :, :] = weighted_mean_wf
+
+    mean_wf = new_mean_wf
+
+    # calculate new metrics
+    new_spike_times = []
+    for id in cluster_ids:
+        new_spike_times.extend(times_multi[id])
+
+    cl_labels.loc[cl_labels["cluster_id"].isin(cluster_ids), "label"] = "merged"
+    if "label_reason" in cl_labels:
+        cl_labels.loc[cl_labels["cluster_id"].isin(cluster_ids), "label_reason"] = (
+            f"merged into cluster_id {new_id}"
+        )
+
+    # save data
+    # mean_wf
+    np.save(
+        os.path.join(params["KS_folder"], "mean_waveforms.npy"),
+        mean_wf,
+    )
+    cl_labels.to_csv(
+        os.path.join(params["KS_folder"], "cluster_group.csv"), index=False
+    )
+    np.save(
+        os.path.join(params["KS_folder"], "spike_times.npy"),
+        new_spike_times,
+    )

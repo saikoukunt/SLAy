@@ -32,10 +32,9 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     cl_labels: pd.DataFrame = pd.read_csv(
         os.path.join(params["KS_folder"], "cluster_group.tsv"),
         sep="\t",
-        names=["cluster_id", "KSLabel"],
-        header=0,
     )
     cl_labels.set_index("cluster_id", inplace=True)
+    cl_labels["cluster_id"] = cl_labels.index
 
     channel_pos: NDArray[np.float_] = np.load(
         os.path.join(params["KS_folder"], "channel_positions.npy")
@@ -60,7 +59,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     )
 
     ## TODO: revert this change and fill gaps in cl_labels
-    cl_good: NDArray[np.bool_] = np.zeros(n_clust, dtype=bool)
+    good_ids: NDArray[np.bool_] = np.zeros(n_clust, dtype=bool)
     unique: NDArray[np.int_] = np.unique(clusters)
     for cl in range(n_clust):
         if (
@@ -71,7 +70,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
                 in params["good_lbls"]
             )
         ):
-            cl_good[cl] = True
+            good_ids[cl] = True
 
     mean_wf, std_wf, spikes = bd.calc_mean_and_std_wf(
         params,
@@ -138,7 +137,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
         # Calculate similarity using distances in the autoencoder latent space.
         sim, _, _, _ = bd.calc_ae_sim(
-            mean_wf, net, peak_chans, spk_data, cl_good, do_shft=params["ae_shft"]
+            mean_wf, net, peak_chans, spk_data, good_ids, do_shft=params["ae_shft"]
         )
         pass_ms = sim > params["sim_thresh"]
     elif params["sim_type"] == "mean":
@@ -203,7 +202,10 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     t7 = time.time()
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))
 
+    vals = [cl_labels, mean_wf, counts, times_multi]
+
     return (
+        vals,
         mean_sim_time,
         xcorr_time,
         ref_pen_time,

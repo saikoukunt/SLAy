@@ -12,12 +12,6 @@ from burst_detector.autoencoder import (
 )
 from burst_detector.bursts import base_algo, find_bursts
 from burst_detector.cluster_metrics import calc_wf_norms, wf_means_similarity
-from burst_detector.custom_metrics import (
-    calc_sliding_RP_viol,
-    calc_SNR,
-    calc_wf_shape_metrics,
-    extract_noise,
-)
 from burst_detector.plot import plot_corr, plot_merges, plot_wfs
 from burst_detector.stages import (
     calc_ae_sim,
