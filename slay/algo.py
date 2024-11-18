@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 from numpy.typing import NDArray
 
-import burst_detector as bd
+import slay
 
 logger = logging.getLogger("burst-detector")
 
@@ -51,8 +51,8 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    counts = bd.spikes_per_cluster(clusters)
-    times_multi = bd.find_times_multi(
+    counts = slay.spikes_per_cluster(clusters)
+    times_multi = slay.find_times_multi(
         times,
         clusters,
         np.arange(n_clust),
@@ -68,7 +68,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
 
-    mean_wf, std_wf, spikes = bd.calc_mean_and_std_wf(
+    mean_wf, std_wf, spikes = slay.calc_mean_and_std_wf(
         params,
         n_clust,
         good_ids,
@@ -102,7 +102,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             "num_chan": params["ae_chan"],
             "for_shft": params["ae_shft"],
         }
-        spk_snips, cl_ids = bd.generate_train_data(
+        spk_snips, cl_ids = slay.generate_train_data(
             data, ci, channel_pos, ext_params, params
         )
         # Train the autoencoder if needed.
@@ -113,7 +113,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         )
         if not os.path.exists(model_path):
             logger.info("Training autoencoder...")
-            net, spk_data = bd.train_ae(
+            net, spk_data = slay.train_ae(
                 spk_snips,
                 cl_ids,
                 do_shft=params["ae_shft"],
@@ -126,19 +126,19 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             logger.info(f"Autoencoder saved in {model_path}")
         else:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            net = bd.CN_AE().to(device)
+            net = slay.CN_AE().to(device)
             net.load_state_dict(torch.load(model_path))
             net.eval()
-            spk_data = bd.SpikeDataset(spk_snips, cl_ids)
+            spk_data = slay.SpikeDataset(spk_snips, cl_ids)
 
         # Calculate similarity using distances in the autoencoder latent space.
-        sim, _, _, _ = bd.calc_ae_sim(
+        sim, _, _, _ = slay.calc_ae_sim(
             mean_wf, net, peak_chans, spk_data, good_ids, do_shft=params["ae_shft"]
         )
         pass_ms = sim > params["sim_thresh"]
     elif params["sim_type"] == "mean":
         # Calculate similarity using inner products between waveforms.
-        sim, _, _, mean_wf, pass_ms = bd.calc_mean_sim(
+        sim, _, _, mean_wf, pass_ms = slay.calc_mean_sim(
             clusters, counts, n_clust, cl_labels, mean_wf, params
         )
         sim[pass_ms == False] = 0
@@ -149,13 +149,13 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
     # Calculate a significance metric for cross-correlograms.
     logger.info("Calculating cross-correlation metric...")
-    xcorr_sig, _, _ = bd.calc_xcorr_metric(times_multi, n_clust, pass_ms, params)
+    xcorr_sig, _, _ = slay.calc_xcorr_metric(times_multi, n_clust, pass_ms, params)
 
     t4 = time.time()
     xcorr_time = time.strftime("%H:%M:%S", time.gmtime(t4 - t1))
     # Calculate a refractor period penalty.
     logger.info("Calculating refractory period penalty...")
-    ref_pen, _ = bd.calc_ref_p(times_multi, n_clust, pass_ms, xcorr_sig, params)
+    ref_pen, _ = slay.calc_ref_p(times_multi, n_clust, pass_ms, xcorr_sig, params)
     t5 = time.time()
     ref_pen_time = time.strftime("%H:%M:%S", time.gmtime(t5 - t4))
 
@@ -175,7 +175,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
     # Calculate/perform merges.
     logger.info("Merging...")
-    old2new, new2old = bd.merge_clusters(clusters, mean_wf, final_metric, params)
+    old2new, new2old = slay.merge_clusters(clusters, mean_wf, final_metric, params)
 
     t6 = time.time()
     merge_time: str = time.strftime("%H:%M:%S", time.gmtime(t6 - t5))
@@ -193,7 +193,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     merges = list(new2old.values())
 
     if params["plot_merges"]:
-        bd.plot_merges(merges, times_multi, mean_wf, std_wf, spikes, params)
+        slay.plot_merges(merges, times_multi, mean_wf, std_wf, spikes, params)
 
     t7 = time.time()
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))

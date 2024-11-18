@@ -17,7 +17,7 @@ from sklearn.neighbors import NearestNeighbors
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import burst_detector as bd
+import slay
 
 logger = logging.getLogger("burst-detector")
 
@@ -70,7 +70,7 @@ def calc_mean_sim(
             cl_good[i] = True
 
     # calculate mean similarity
-    mean_sim, wf_norms, offset = bd.wf_means_similarity(
+    mean_sim, wf_norms, offset = slay.wf_means_similarity(
         mean_wf, cl_good, use_jitter=params["jitter"], max_jitter=params["jitter_amt"]
     )
 
@@ -95,7 +95,7 @@ def calc_ae_sim(
     mean_wf: NDArray[np.float_],
     model: nn.Module,
     peak_chans: NDArray[np.int_],
-    spk_data: bd.SpikeDataset,
+    spk_data: slay.SpikeDataset,
     good_ids: NDArray[np.int_],
     do_shft: bool,
     zDim: int = 15,
@@ -266,7 +266,7 @@ def calc_xcorr_metric(
     for c1 in range(n_clust):
         for c2 in range(c1 + 1, n_clust):
             if pass_ms[c1, c2]:
-                xcorr_sig[c1, c2] = bd.xcorr_sig(
+                xcorr_sig[c1, c2] = slay.xcorr_sig(
                     xgrams[c1, c2],
                     null_xgram=np.ones_like(xgrams[c1, c2]),
                     window_size=params["window_size"],
@@ -453,14 +453,14 @@ def xcorr_func(
         ccg (NDArray): The computed cross-correlogram.
 
     """
-    import burst_detector as bd
+    import slay as slay
 
     # extract spike times
     c1_times = times_multi[c1] / params["sample_rate"]
     c2_times = times_multi[c2] / params["sample_rate"]
 
     # compute xgrams
-    return bd.x_correlogram(
+    return slay.x_correlogram(
         c1_times,
         c2_times,
         params["max_window"],
@@ -494,14 +494,14 @@ def ref_p_func(
     import numpy as np
     from scipy.stats import poisson
 
-    import burst_detector as bd
+    import slay as slay
 
     # Extract spike times.
     c1_times = times_multi[c1] / params["sample_rate"]
     c2_times = times_multi[c2] / params["sample_rate"]
 
     # Calculate cross-correlogram.
-    ccg = bd.x_correlogram(
+    ccg = slay.x_correlogram(
         c1_times,
         c2_times,
         window_size=2,
