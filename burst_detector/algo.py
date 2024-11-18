@@ -39,8 +39,8 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     channel_pos: NDArray[np.float_] = np.load(
         os.path.join(params["KS_folder"], "channel_positions.npy")
     )
-    if "group" not in cl_labels.columns:
-        cl_labels["group"] = cl_labels["KSLabel"]
+    if "label" not in cl_labels.columns:
+        cl_labels["label"] = cl_labels["KSLabel"]
 
     # Compute useful cluster info.
     # Load the ephys recording.
@@ -66,7 +66,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             (cl in unique)
             and (counts[cl] > params["min_spikes"])
             and (
-                cl_labels.loc[cl_labels["cluster_id"] == cl, "group"].item()
+                cl_labels.loc[cl_labels["cluster_id"] == cl, "label"].item()
                 in params["good_lbls"]
             )
         ):

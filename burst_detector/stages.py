@@ -65,7 +65,7 @@ def calc_mean_sim(
         if (
             (i in unique)
             and (counts[i] > params["sp_num_thresh"])
-            and (labels.loc[labels["cluster_id"] == i, "group"].item() == "good")
+            and (labels.loc[labels["cluster_id"] == i, "label"].item() == "good")
         ):
             cl_good[i] = True
 
@@ -83,9 +83,9 @@ def calc_mean_sim(
                 and (counts[c2] >= params["sp_num_thresh"])
             ):
                 if (
-                    labels.loc[labels["cluster_id"] == c1, "group"].item() == "good"
+                    labels.loc[labels["cluster_id"] == c1, "label"].item() == "good"
                 ) and (
-                    labels.loc[labels["cluster_id"] == c2, "group"].item() == "good"
+                    labels.loc[labels["cluster_id"] == c2, "label"].item() == "good"
                 ):
                     pass_ms[c1, c2] = True
                     pass_ms[c2, c1] = True
