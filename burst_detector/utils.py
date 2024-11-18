@@ -103,15 +103,17 @@ def find_times_multi(
     Returns:
         cl_times (list): found cluster spike times.
     """
-    n_clust = np.max(clust_ids) + 1
-    cl_times = [[] for _ in range(n_clust)]
-    for i in range(sp_times.shape[0]):
-        time = sp_times[i]
-        if time >= pre_samples and time < data.shape[0] - post_samples:
-            cl_times[sp_clust[i]].append(time)
-    for i in range(len(cl_times)):
-        cl_times[i] = np.array(cl_times[i])
-    return cl_times
+    times_multi = []
+
+    for i in clust_ids:
+        cl_spike_times = sp_times[sp_clust == i]
+        cl_spike_times = cl_spike_times[
+            (cl_spike_times >= pre_samples)
+            & (cl_spike_times < data.shape[0] - post_samples)
+        ]
+        times_multi.append(cl_spike_times)
+
+    return times_multi
 
 
 def spikes_per_cluster(sp_clust: NDArray[np.int_]) -> NDArray[np.int_]:

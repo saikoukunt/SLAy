@@ -65,7 +65,7 @@ def calc_mean_sim(
         if (
             (i in unique)
             and (counts[i] > params["sp_num_thresh"])
-            and (labels.loc[labels["cluster_id"] == i, "label"].item() == "good")
+            and (labels.loc[i, "label"].item() == "good")
         ):
             cl_good[i] = True
 
@@ -82,10 +82,8 @@ def calc_mean_sim(
                 (counts[c1] >= params["sp_num_thresh"])
                 and (counts[c2] >= params["sp_num_thresh"])
             ):
-                if (
-                    labels.loc[labels["cluster_id"] == c1, "label"].item() == "good"
-                ) and (
-                    labels.loc[labels["cluster_id"] == c2, "label"].item() == "good"
+                if (labels.loc[c1, "label"].item() == "good") and (
+                    labels.loc[c2, "label"].item() == "good"
                 ):
                     pass_ms[c1, c2] = True
                     pass_ms[c2, c1] = True
@@ -98,7 +96,7 @@ def calc_ae_sim(
     model: nn.Module,
     peak_chans: NDArray[np.int_],
     spk_data: bd.SpikeDataset,
-    cl_good: NDArray[np.bool_],
+    good_ids: NDArray[np.int_],
     do_shft: bool,
     zDim: int = 15,
     sf: int = 1,
@@ -116,7 +114,7 @@ def calc_ae_sim(
         peak_chans (NDArray): Peak channel for each cluster.
         spk_data (SpikeDataset): Dataset containing snippets used for
             cluster comparison.
-        cl_good (NDArray): Cluster quality labels.
+        good_ids (NDArray): Cluster quality labels.
         do_shft (bool): True if model and spk_data are for an autoencoder explicitly
             trained on time-shifted snippets.
         zDim (int, optional): Latent dimensionality of CN_AE. Defaults to 15.
@@ -161,7 +159,7 @@ def calc_ae_sim(
             spk_lat[start_idx:end_idx] = out.cpu().detach().numpy()
             spk_lab[start_idx:end_idx] = lab.cpu().detach().numpy()
 
-    logger.info(f"Average Loss: {loss/len(dl):.4f}")
+    logger.info(f"\nAverage Loss: {loss/len(dl):.4f}")
 
     # construct dataframes with peak channel
     ae_df = pd.DataFrame({"cluster_id": spk_lab})
@@ -193,22 +191,21 @@ def calc_ae_sim(
 
     # ignore self-similarity, low-spike and noise clusters
     np.fill_diagonal(ae_sim, 0)
-    ae_sim[cl_good == False, :] = 0
-    ae_sim[:, cl_good == False] = 0
+    ae_sim[good_ids, :] = 0
+    ae_sim[:, good_ids] = 0
 
     # penalize pairs with different peak channels
     amps = np.max(mean_wf, 2) - np.min(mean_wf, 2)
-    for i in tqdm(range(ae_dist.shape[0]), "Calculating similarity metric"):
-        for j in range(i, ae_dist.shape[0]):
-            if (cl_good[i]) and (cl_good[j]):
-                p1 = peak_chans[i]
-                p2 = peak_chans[j]
+    for i in tqdm(good_ids, "Calculating similarity metric"):
+        for j in good_ids:
+            p1 = peak_chans[i]
+            p2 = peak_chans[j]
 
-                # penalize by geometric mean of cross-decay
-                ae_sim[i, j] *= np.sqrt(
-                    amps[i, p2] / amps[i, p1] * amps[j, p1] / amps[j, p2]
-                )
-                ae_sim[j, i] = ae_sim[i, j]
+            # penalize by geometric mean of cross-decay
+            ae_sim[i, j] *= np.sqrt(
+                amps[i, p2] / amps[i, p1] * amps[j, p1] / amps[j, p2]
+            )
+            ae_sim[j, i] = ae_sim[i, j]
 
     return ae_sim, spk_lat_peak, lat_mean, spk_lab
 
@@ -540,10 +537,7 @@ def ref_p_func(
     # Compute confidence of less than thresh contamination at each refractory period.
     confs = np.zeros(sum_res.shape[0])
     for j, cnt in enumerate(sum_res):
-        if max_contam[j] > 3:
-            confs[j] = 1 - poisson.cdf(cnt, max_contam[j])
-        else:
-            confs[j] = max(1 - cnt / max_contam[j], 1 - poisson.cdf(cnt, max_contam[j]))
+        confs[j] = 1 - poisson.cdf(cnt, max_contam[j])
 
     return 1 - confs.max(), bTest[confs.argmax()]
 
@@ -556,13 +550,24 @@ def accept_all_merges(vals, params) -> None:
         merges = json.load(f)
         merges = {int(k): v for k, v in sorted(merges.items())}
 
-    cl_labels, mean_wf, n_spikes, times_multi = vals
+    cl_labels, mean_wf, n_spikes, clusters = vals
+
     for new_id, old_ids in merges.items():
-        accept_merge(cl_labels, mean_wf, n_spikes, times_multi, params, old_ids, new_id)
+        mean_wf, cl_labels, clusters = accept_merge(
+            cl_labels, mean_wf, n_spikes, clusters, params, old_ids, new_id
+        )
+
+    # save data
+    np.save(
+        os.path.join(params["KS_folder"], "mean_waveforms.npy"),
+        mean_wf,
+    )
+    cl_labels.to_csv(os.path.join(params["KS_folder"], "cluster_group.tsv"), sep="\t")
+    np.save(os.path.join(params["KS_folder"], "spike_clusters.npy"), clusters)
 
 
 def accept_merge(
-    cl_labels, mean_wf, n_spikes, times_multi, params, cluster_ids: list[int], new_id
+    cl_labels, mean_wf, n_spikes, clusters, params, old_ids: list[int], new_id
 ) -> int:
     # TODO change old_row data to 0's?
     # TODO current code breaks if new id isnt next in line
@@ -577,16 +582,13 @@ def accept_merge(
         int: New cluster_id.
     """
     # if new_id exists skip
-    if new_id in cl_labels["cluster_id"].values:
+    if new_id in cl_labels.index.values:
         raise ValueError(f"New cluster_id {new_id} already exists")
 
     # calculate new mean_wf and std_wf as weighted average
     weighted_mean_wf = np.sum(
-        mean_wf[cluster_ids, :, :]
-        * (
-            n_spikes[cluster_ids][:, np.newaxis, np.newaxis]
-            / np.sum(n_spikes[cluster_ids])
-        ),
+        mean_wf[old_ids, :, :]
+        * (n_spikes[old_ids][:, np.newaxis, np.newaxis] / np.sum(n_spikes[old_ids])),
         axis=0,
     )
 
@@ -605,26 +607,12 @@ def accept_merge(
     mean_wf = new_mean_wf
 
     # calculate new metrics
-    new_spike_times = []
-    for id in cluster_ids:
-        new_spike_times.extend(times_multi[id])
+    cl_labels.loc[old_ids, "label"] = "merged"
+    cl_labels.loc[old_ids, "label_reason"] = f"merged into cluster_id {new_id}"
 
-    cl_labels.loc[cl_labels["cluster_id"].isin(cluster_ids), "label"] = "merged"
-    if "label_reason" in cl_labels:
-        cl_labels.loc[cl_labels["cluster_id"].isin(cluster_ids), "label_reason"] = (
-            f"merged into cluster_id {new_id}"
-        )
+    # add new row
+    cl_labels.loc[new_id, "label"] = cl_labels.loc[old_ids, "label"].mode().values[0]
+    cl_labels.loc[new_id, "label_reason"] = f"merged from cluster_ids {old_ids}"
+    clusters[np.isin(clusters, old_ids)] = new_id
 
-    # save data
-    # mean_wf
-    np.save(
-        os.path.join(params["KS_folder"], "mean_waveforms.npy"),
-        mean_wf,
-    )
-    cl_labels.to_csv(
-        os.path.join(params["KS_folder"], "cluster_group.csv"), index=False
-    )
-    np.save(
-        os.path.join(params["KS_folder"], "spike_times.npy"),
-        new_spike_times,
-    )
+    return mean_wf, cl_labels, clusters

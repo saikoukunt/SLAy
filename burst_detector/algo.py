@@ -32,15 +32,18 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     cl_labels: pd.DataFrame = pd.read_csv(
         os.path.join(params["KS_folder"], "cluster_group.tsv"),
         sep="\t",
+        index_col="cluster_id",
     )
-    cl_labels.set_index("cluster_id", inplace=True)
-    cl_labels["cluster_id"] = cl_labels.index
 
     channel_pos: NDArray[np.float_] = np.load(
         os.path.join(params["KS_folder"], "channel_positions.npy")
     )
+
     if "label" not in cl_labels.columns:
-        cl_labels["label"] = cl_labels["KSLabel"]
+        try:
+            cl_labels["label"] = cl_labels["KSLabel"]
+        except KeyError:
+            cl_labels["label"] = cl_labels["group"]
 
     # Compute useful cluster info.
     # Load the ephys recording.
@@ -59,18 +62,11 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     )
 
     ## TODO: revert this change and fill gaps in cl_labels
-    good_ids: NDArray[np.bool_] = np.zeros(n_clust, dtype=bool)
-    unique: NDArray[np.int_] = np.unique(clusters)
-    for cl in range(n_clust):
-        if (
-            (cl in unique)
-            and (counts[cl] > params["min_spikes"])
-            and (
-                cl_labels.loc[cl_labels["cluster_id"] == cl, "label"].item()
-                in params["good_lbls"]
-            )
-        ):
-            good_ids[cl] = True
+    # update cl_labels to be list with all cluster_ids
+    cl_labels = cl_labels.reindex(np.arange(n_clust)).fillna("unsorted")
+    good_ids = np.argwhere(
+        (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
+    ).flatten()
 
     mean_wf, std_wf, spikes = bd.calc_mean_and_std_wf(
         params,
@@ -202,7 +198,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     t7 = time.time()
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))
 
-    vals = [cl_labels, mean_wf, counts, times_multi]
+    vals = [cl_labels, mean_wf, counts, clusters]
 
     return (
         vals,

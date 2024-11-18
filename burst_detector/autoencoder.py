@@ -56,19 +56,11 @@ def generate_train_data(
             if available.
         cl_ids (NDArray): Cluster labels of spike snippets with shape (# snippets)
     """
-    # Load existing spike snippets
-    spikes_path = os.path.join(params["KS_folder"], "automerge", "spikes.pt")
-    if os.path.exists(spikes_path):
-        logger.info("Loading existing spike snippets...")
-        torch_data = torch.load(spikes_path)
-        return torch_data["spikes"], torch_data["cl_ids"]
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Pre-compute the set of closest channels for each channel.
-    good_ids = np.argwhere(ci["good_ids"]).flatten()
     chans = {}
-    for id in good_ids:
+    for id in ci["good_ids"]:
         chs, peak = bd.find_best_channels(
             ci["mean_wf"][id], channel_pos, params["n_chan"], ext_params["num_chan"]
         )
@@ -81,9 +73,9 @@ def generate_train_data(
 
     # Pre-allocate memory for the snippets for good cluster
     if params["max_spikes"] == -1:
-        n_snip = np.sum(ci["counts"][good_ids])
+        n_snip = np.sum(ci["counts"][ci["good_ids"]])
     else:
-        n_snip = np.sum(np.minimum(ci["counts"][good_ids], params["max_spikes"]))
+        n_snip = np.sum(np.minimum(ci["counts"][ci["good_ids"]], params["max_spikes"]))
 
     spikes = torch.zeros(
         (
@@ -97,7 +89,7 @@ def generate_train_data(
     cl_ids = np.zeros(n_snip, dtype="int16")
 
     snip_idx = 0
-    for id in tqdm(good_ids, desc="Generating snippets"):
+    for id in tqdm(ci["good_ids"], desc="Generating snippets"):
         cl_times = ci["times_multi"][id].astype("int64")
 
         if cl_times.shape[0] > params["max_spikes"]:
@@ -112,8 +104,6 @@ def generate_train_data(
             spikes[snip_idx + j] = torch.Tensor(spike).unsqueeze(dim=0)
         snip_idx += cl_times.shape[0]
 
-    # Save the snippets to disk
-    torch.save({"spikes": spikes, "cl_ids": cl_ids}, spikes_path)
     return spikes, cl_ids
 
 
@@ -394,6 +384,6 @@ def train_ae(
 
         avg_test_loss = running_tloss / len(test_loader)
         tqdm.write(
-            f"Epoch {epoch + 1}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f}"
+            f"Epoch {epoch + 1:2d}/{num_epochs} | Train Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f}"
         )
     return net, spk_data
