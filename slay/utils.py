@@ -16,7 +16,7 @@ from scipy import stats
 from scipy.stats import wasserstein_distance
 from tqdm import tqdm
 
-import burst_detector as bd
+import slay
 
 
 def parse_cmd_line_args() -> dict[str, Any]:
@@ -307,7 +307,7 @@ def calc_sliding_RP_viol(
         times = times_multi[i] / 30000
         if times.shape[0] > 1:
             # calculate and avg halves of acg
-            acg = bd.auto_correlogram(times, 2, bin_size / 1000, 5 / 30000)
+            acg = slay.auto_correlogram(times, 2, bin_size / 1000, 5 / 30000)
             half_len = int(acg.shape[0] / 2)
             acg[half_len:] = (acg[half_len:] + acg[:half_len][::-1]) / 2
             acg = acg[half_len:]
@@ -445,7 +445,7 @@ def calc_fr_unif(
             spike_times.append(times_multi[clust])
 
         spike_times = np.concatenate(spike_times)
-        c1, _ = bd.bin_spike_trains(spike_times, spike_times, 20)
+        c1, _ = slay.bin_spike_trains(spike_times, spike_times, 20)
         n = c1.shape[0]
         merged_ds[i] = 1 - wasserstein_distance(
             u_values=np.arange(n) / n,
@@ -458,7 +458,7 @@ def calc_fr_unif(
     for i in range(len(old2new.keys())):
         clust = int(list(old2new.keys())[i])
         spike_times = times_multi[clust]
-        c1, _ = bd.bin_spike_trains(spike_times, spike_times, 20)
+        c1, _ = slay.bin_spike_trains(spike_times, spike_times, 20)
         n = c1.shape[0]
         single_ds[i] = 1 - wasserstein_distance(
             u_values=np.arange(n) / n,
