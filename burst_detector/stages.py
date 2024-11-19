@@ -1,7 +1,5 @@
 import functools
-import itertools
 import json
-import logging
 import multiprocessing as mp
 import os
 from collections import deque
@@ -18,8 +16,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import burst_detector as bd
-
-logger = logging.getLogger("burst-detector")
 
 
 def calc_mean_sim(
@@ -159,7 +155,7 @@ def calc_ae_sim(
             spk_lat[start_idx:end_idx] = out.cpu().detach().numpy()
             spk_lab[start_idx:end_idx] = lab.cpu().detach().numpy()
 
-    logger.info(f"\nAverage Loss: {loss/len(dl):.4f}")
+    tqdm.write(f"\nAverage Loss: {loss/len(dl):.4f}")
 
     # construct dataframes with peak channel
     ae_df = pd.DataFrame({"cluster_id": spk_lab})
@@ -543,7 +539,7 @@ def ref_p_func(
 
 
 def accept_all_merges(vals, params) -> None:
-    print("Auto Accepting Merges")
+    tqdm.write("Auto Accepting Merges")
     # merge suggested clusters
     new2old = os.path.join(params["KS_folder"], "automerge", "new2old.json")
     with open(new2old, "r") as f:

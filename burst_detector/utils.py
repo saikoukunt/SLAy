@@ -6,7 +6,6 @@ Assumes that ephys data is stored in the phy output format.
 
 import argparse
 import json
-import logging
 import os
 from typing import Any
 
@@ -18,8 +17,6 @@ from scipy.stats import wasserstein_distance
 from tqdm import tqdm
 
 import burst_detector as bd
-
-logger = logging.getLogger("burst-detector")
 
 
 def parse_cmd_line_args() -> dict[str, Any]:
@@ -273,7 +270,7 @@ def calc_mean_and_std_wf(
                 mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
                 std_wf[i, :, :] = cp.std(spikes_cp, axis=0)
 
-        logger.info("Saving mean and std waveforms...")
+        tqdm.write("Saving mean and std waveforms...")
         cp.save(mean_wf_path, mean_wf)
         cp.save(std_wf_path, std_wf)
         # Convert to numpy arrays

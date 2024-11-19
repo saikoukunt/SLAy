@@ -1,7 +1,3 @@
-import logging
-import sys
-
-import burst_detector.custom_metrics as custom_metrics
 import burst_detector.run as run
 from burst_detector.algo import run_merge
 from burst_detector.autoencoder import (
@@ -36,13 +32,3 @@ from burst_detector.xcorr import (
     x_correlogram,
     xcorr_sig,
 )
-
-logger = logging.getLogger("burst-detector")
-logger.setLevel(logging.DEBUG)
-
-console = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("%(message)s")
-console.setFormatter(formatter)
-
-logger.addHandler(console)
-logger.propagate = False

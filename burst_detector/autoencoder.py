@@ -1,5 +1,3 @@
-import logging
-import os
 from typing import Any, Callable
 
 import numpy as np
@@ -12,8 +10,6 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from tqdm import tqdm
 
 import burst_detector as bd
-
-logger = logging.getLogger("burst-detector")
 
 
 def generate_train_data(
