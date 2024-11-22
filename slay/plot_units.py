@@ -6,7 +6,7 @@ from marshmallow import EXCLUDE
 from matplotlib.backends.backend_pdf import PdfPages
 from tqdm import tqdm
 
-import slay 
+import slay
 from slay.schemas import PlotUnitsParams
 
 
@@ -29,7 +29,6 @@ def main() -> None:
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     # count spikes per cluster, load quality labels
-    counts = slay.spikes_per_cluster(clusters)
     times_multi = slay.find_times_multi(
         times,
         clusters,
@@ -38,6 +37,7 @@ def main() -> None:
         params["pre_samples"],
         params["post_samples"],
     )
+    counts = np.array([len(times_multi[i]) for i in range(n_clust)])
 
     # filter out low-spike/noise units
     good_ids = np.where(counts > params["min_spikes"])[0]

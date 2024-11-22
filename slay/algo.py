@@ -48,7 +48,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    counts = slay.spikes_per_cluster(clusters)
     times_multi = slay.find_times_multi(
         times,
         clusters,
@@ -57,9 +56,10 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         params["pre_samples"],
         params["post_samples"],
     )
+    counts = np.array([len(times_multi[i]) for i in range(n_clust)])
 
     # update cl_labels to be list with all cluster_ids
-    cl_labels = cl_labels.reindex(np.arange(n_clust)).fillna("unsorted")
+    cl_labels = cl_labels.reindex(np.arange(n_clust))
     good_ids = np.argwhere(
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
