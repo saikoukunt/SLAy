@@ -10,7 +10,7 @@ from matplotlib.figure import Figure
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-import burst_detector as bd
+import slay
 
 matplotlib.use("Agg")
 
@@ -186,7 +186,7 @@ def plot_corr(
 
     # auto correlograms
     for i in range(n_clust):
-        acg = bd.auto_correlogram(
+        acg = slay.auto_correlogram(
             times_multi[clust[i]] / 30000,
             window_size,
             bin_size,
@@ -212,7 +212,7 @@ def plot_corr(
 
     # cross correlograms
     for i, j in cross_pairs:
-        ccg = bd.x_correlogram(
+        ccg = slay.x_correlogram(
             times_multi[clust[i]] / 30000,
             times_multi[clust[j]] / 30000,
             window_size,

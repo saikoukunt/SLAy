@@ -84,7 +84,7 @@ def find_bursts(
 
     bursts: pd.DataFrame = create_output(spike_times, q)
 
-    return bursts, q, a[:max_level]
+    return bursts, q, a[:max_level+1]
 
 
 def find_sequence(
@@ -136,11 +136,11 @@ def find_sequence(
 
     # Viterbi algorithm to estimate optimal state sequence
     C: NDArray[np.float_] = np.zeros(k)  # cost
-    q: NDArray[np.int_] = np.zeros((k, 1), dtype="np.int_")  # state sequence
+    q: NDArray[np.int_] = np.zeros((k, 1), dtype="int")  # state sequence
 
     for t in range(n):
         Cprime: NDArray[np.float_] = np.zeros(k)
-        qprime: NDArray[np.int_] = np.zeros((k, t + 1), dtype="np.int_")
+        qprime: NDArray[np.int_] = np.zeros((k, t + 1), dtype="int")
 
         for j in range(k):
             # Calculate the cost of transitioning from all possible previous states

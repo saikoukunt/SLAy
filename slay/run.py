@@ -2,15 +2,17 @@ import json
 import os
 from typing import Any
 
-import burst_detector as bd
-from burst_detector.schemas import OutputParams, RunParams
+import slay
+from slay.schemas import OutputParams, RunParams
 
 
 def main(args: dict = None) -> None:
-    args = bd.parse_kilosort_params(args)
-    schema = RunParams(unknown=EXCLUDE)
+    args = slay.parse_kilosort_params(args)
+    schema = RunParams()
     params = schema.load(args)
-    mst, xct, rpt, mt, tt, num_merge, oc = bd.run_merge(params)
+    vals, mst, xct, rpt, mt, tt, num_merge, oc = slay.run_merge(params)
+    if params["auto_accept_merges"]:
+        slay.stages.accept_all_merges(vals, params)
 
     output: dict[str, Any] = {
         "mean_time": mst,
@@ -37,5 +39,5 @@ def main(args: dict = None) -> None:
 
 
 if __name__ == "__main__":
-    args = bd.parse_cmd_line_args()
+    args = slay.parse_cmd_line_args()
     main(args)

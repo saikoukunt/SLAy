@@ -6,12 +6,12 @@ from marshmallow import EXCLUDE
 from matplotlib.backends.backend_pdf import PdfPages
 from tqdm import tqdm
 
-import burst_detector as bd
-from burst_detector.schemas import PlotUnitsParams
+import slay
+from slay.schemas import PlotUnitsParams
 
 
 def main() -> None:
-    args = bd.parse_cmd_line_args()
+    args = slay.parse_cmd_line_args()
     schema = PlotUnitsParams(unknown=EXCLUDE)
     params = schema.load(args)
 
@@ -29,8 +29,7 @@ def main() -> None:
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     # count spikes per cluster, load quality labels
-    counts = bd.spikes_per_cluster(clusters)
-    times_multi = bd.find_times_multi(
+    times_multi = slay.find_times_multi(
         times,
         clusters,
         np.arange(n_clust),
@@ -38,16 +37,17 @@ def main() -> None:
         params["pre_samples"],
         params["post_samples"],
     )
+    counts = np.array([len(times_multi[i]) for i in range(n_clust)])
 
     # filter out low-spike/noise units
     good_ids = np.where(counts > params["min_spikes"])[0]
-    mean_wf, std_wf, spikes = bd.calc_mean_and_std_wf(
+    mean_wf, std_wf, spikes = slay.calc_mean_and_std_wf(
         params, n_clust, good_ids, times_multi, data, return_spikes=True
     )
 
     for id in tqdm(good_ids, desc="Plotting units"):
-        wf_plot = bd.plot_wfs([id], mean_wf, std_wf, spikes)
-        acg_plot = bd.plot_corr([id], times_multi, params)
+        wf_plot = slay.plot_wfs([id], mean_wf, std_wf, spikes)
+        acg_plot = slay.plot_corr([id], times_multi, params)
 
         name = os.path.join(params["KS_folder"], "automerge", f"units{id}.pdf")
         with PdfPages(name) as file:

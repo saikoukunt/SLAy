@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='burst_detector',
+    name='slay',
     packages = find_packages(), 
 )
