@@ -186,9 +186,10 @@ def calc_ae_sim(
     ae_sim = np.exp(-0.5 * ae_dist / ref_dist)
 
     # ignore self-similarity, low-spike and noise clusters
+    bad_ids = np.setdiff1d(np.arange(mean_wf.shape[0]), good_ids)
     np.fill_diagonal(ae_sim, 0)
-    ae_sim[good_ids, :] = 0
-    ae_sim[:, good_ids] = 0
+    ae_sim[bad_ids, :] = 0
+    ae_sim[:, bad_ids] = 0
 
     # penalize pairs with different peak channels
     amps = np.max(mean_wf, 2) - np.min(mean_wf, 2)
