@@ -88,7 +88,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             "times_multi": times_multi,
             "counts": counts,
             "good_ids": good_ids,
-            "labels": cl_labels,
             "mean_wf": mean_wf,
         }
         ext_params = {

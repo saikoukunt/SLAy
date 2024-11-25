@@ -110,7 +110,7 @@ def calc_ae_sim(
         peak_chans (NDArray): Peak channel for each cluster.
         spk_data (SpikeDataset): Dataset containing snippets used for
             cluster comparison.
-        good_ids (NDArray): Cluster quality labels.
+        good_ids (NDArray): IDs for clusters that passed the quality metrics and min_spikes threshold.
         do_shft (bool): True if model and spk_data are for an autoencoder explicitly
             trained on time-shifted snippets.
         zDim (int, optional): Latent dimensionality of CN_AE. Defaults to 15.

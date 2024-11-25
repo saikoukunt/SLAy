@@ -34,9 +34,8 @@ def generate_train_data(
             Should be passed in as an np.memmap for large datasets.
         ci (dict): Cluster information --
             times_multi (list): Spike times indexed by cluster id.
-            clusters (NDArray): Spike cluster assignments.
             counts (dict): Spike counts per cluster.
-            labels (pd.DataFrame): Cluster quality labels.
+            good_ids (NDArray): IDs of clusters that passed quality and min_spikes threshold.
             mean_wf (NDArray): Cluster mean waveforms with shape
                 (# of clusters, # channels, # timepoints).
         channel_pos (NDArray): XY coordinates of each channel on the probe.
@@ -67,7 +66,7 @@ def generate_train_data(
         ext_params["pre_samples"] += 5
         ext_params["post_samples"] += 5
 
-    # Pre-allocate memory for the snippets for good cluster
+    # Pre-allocate memory for the snippets for good clusters.
     if params["max_spikes"] == -1:
         n_snip = np.sum(ci["counts"][ci["good_ids"]])
     else:
