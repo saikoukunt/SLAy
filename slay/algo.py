@@ -196,7 +196,14 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     t7 = time.time()
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))
 
-    vals = [cl_labels, mean_wf, counts, clusters]
+    vals = [
+        cl_labels,
+        mean_wf,
+        counts,
+        times,
+        clusters,
+        times_multi,
+    ]  # values needed if auto_accept_merges is True
 
     return (
         vals,

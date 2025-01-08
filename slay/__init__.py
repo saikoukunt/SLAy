@@ -5,6 +5,7 @@ from slay.bursts import base_algo, find_bursts
 from slay.cluster_metrics import calc_wf_norms, wf_means_similarity
 from slay.plot import plot_corr, plot_merges, plot_wfs
 from slay.stages import (
+    accept_all_merges,
     calc_ae_sim,
     calc_mean_sim,
     calc_ref_p,

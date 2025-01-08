@@ -547,11 +547,19 @@ def accept_all_merges(vals, params) -> None:
         merges = json.load(f)
         merges = {int(k): v for k, v in sorted(merges.items())}
 
-    cl_labels, mean_wf, n_spikes, clusters = vals
+    cl_labels, mean_wf, n_spikes, spike_times, spike_clusters, times_multi = vals
 
     for new_id, old_ids in merges.items():
-        mean_wf, cl_labels, clusters = accept_merge(
-            cl_labels, mean_wf, n_spikes, clusters, params, old_ids, new_id
+        mean_wf, cl_labels, spike_times, spike_clusters = accept_merge(
+            cl_labels,
+            mean_wf,
+            n_spikes,
+            spike_times,
+            spike_clusters,
+            times_multi,
+            params,
+            old_ids,
+            new_id,
         )
 
     # save data
@@ -560,14 +568,22 @@ def accept_all_merges(vals, params) -> None:
         mean_wf,
     )
     cl_labels.to_csv(os.path.join(params["KS_folder"], "cluster_group.tsv"), sep="\t")
-    np.save(os.path.join(params["KS_folder"], "spike_clusters.npy"), clusters)
+    np.save(os.path.join(params["KS_folder"], "spike_clusters.npy"), spike_clusters)
+    np.save(os.path.join(params["KS_folder"], "spike_times.npy"), spike_times)
 
 
 def accept_merge(
-    cl_labels, mean_wf, n_spikes, clusters, params, old_ids: list[int], new_id
+    cl_labels,
+    mean_wf,
+    n_spikes,
+    spike_times,
+    spike_clusters,
+    times_multi,
+    params,
+    old_ids: list[int],
+    new_id,
 ) -> int:
     # TODO change old_row data to 0's?
-    # TODO current code breaks if new id isnt next in line
     """
     Merge clusters together into a new cluster.
 
@@ -578,11 +594,16 @@ def accept_merge(
     Returns:
         int: New cluster_id.
     """
-    # if new_id exists skip
+    # if new_id exists fix duplicate spikes as needed
     if new_id in cl_labels.index.values:
-        raise ValueError(f"New cluster_id {new_id} already exists")
+        print(f"New cluster_id {new_id} already exists, skipping merge")
+        return mean_wf, cl_labels, spike_times, spike_clusters
 
-    # calculate new mean_wf and std_wf as weighted average
+    new_spike_times, new_spike_clusters = remove_duplicate_spikes(
+        times_multi, spike_times, spike_clusters, old_ids
+    )
+
+    # calculate new mean_wf and std_wf as weighted average, will be slightly affected by duplicated spike_times, but so minimal
     weighted_mean_wf = np.sum(
         mean_wf[old_ids, :, :]
         * (n_spikes[old_ids][:, np.newaxis, np.newaxis] / np.sum(n_spikes[old_ids])),
@@ -601,8 +622,6 @@ def accept_merge(
     new_mean_wf[:old_rows_i, :, :] = mean_wf[:old_rows_i, :, :]  # If get partial save
     new_mean_wf[new_id, :, :] = weighted_mean_wf
 
-    mean_wf = new_mean_wf
-
     # calculate new metrics
     cl_labels.loc[old_ids, "label"] = "merged"
     cl_labels.loc[old_ids, "label_reason"] = f"merged into cluster_id {new_id}"
@@ -610,6 +629,35 @@ def accept_merge(
     # add new row
     cl_labels.loc[new_id, "label"] = cl_labels.loc[old_ids, "label"].mode().values[0]
     cl_labels.loc[new_id, "label_reason"] = f"merged from cluster_ids {old_ids}"
-    clusters[np.isin(clusters, old_ids)] = new_id
+    new_spike_clusters[np.isin(new_spike_clusters, old_ids)] = new_id
 
-    return mean_wf, cl_labels, clusters
+    return new_mean_wf, cl_labels, new_spike_times, new_spike_clusters
+
+
+def remove_duplicate_spikes(
+    times_multi, spike_times, spike_clusters, old_ids, n_samples=5
+):
+    combined_spike_times = times_multi[old_ids[0]]
+    for old_id in old_ids[1:]:
+        # add spike times that are NOT within 5 samples of each other
+        combined_spike_times = np.concatenate(
+            [combined_spike_times, times_multi[old_id]]
+        )
+        combined_spike_times = np.sort(combined_spike_times)
+
+        duplicate_idxs = np.where(np.diff(combined_spike_times) <= n_samples)[0]
+        duplicate_idxs += 1  # delete the second of the duplicates
+        duplicate_times = combined_spike_times[duplicate_idxs]
+
+        combined_spike_times = np.delete(combined_spike_times, duplicate_idxs)
+
+        # find index where spike_time is duplicate and spike_cluster is old_ids
+        cluster_idxs = np.where(spike_clusters == old_id)[0]
+        duplicate_idxs = np.where(np.isin(spike_times, duplicate_times))[0]
+        duplicate_idxs = np.intersect1d(cluster_idxs, duplicate_idxs)
+
+        # for each duplicate spike, remove associated spike_time and spike_cluster
+        spike_times = np.delete(spike_times, duplicate_idxs)
+        spike_clusters = np.delete(spike_clusters, duplicate_idxs)
+
+    return spike_times, spike_clusters
