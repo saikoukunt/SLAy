@@ -12,7 +12,7 @@ def main(args: dict = None) -> None:
     params = schema.load(args)
     vals, mst, xct, rpt, mt, tt, num_merge, oc = slay.run_merge(params)
     if params["auto_accept_merges"]:
-        slay.stages.accept_all_merges(vals, params)
+        slay.accept_all_merges(vals, params)
 
     output: dict[str, Any] = {
         "mean_time": mst,
