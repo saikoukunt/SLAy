@@ -205,7 +205,7 @@ def calc_mean_and_std_wf(
 ) -> tuple[NDArray, NDArray, dict[int, NDArray]]:
     """
     Calculate mean waveform and std waveform for each cluster. Need to have loaded some metrics. If return_spikes is True, also returns the spike waveforms.
-    Use GPU acceleration with cupy.
+    Use GPU acceleration with cupy. If the mean waveform is the incorrect shape, it will be recalculated.
 
     Args:
         params (dict): Parameters for the recording.
@@ -213,12 +213,13 @@ def calc_mean_and_std_wf(
         cluster_ids (list): List of cluster ids to calculate waveforms for.
         spike_times (list): List of spike times indexed by cluster id.
         data (NDArray): Ephys data with shape (n_timepoints, n_channels).
+        return_std (bool): Whether to return the standard deviation of the waveforms. Defaults to True.
         return_spikes (bool): Whether to return the spike waveforms. Defaults to False.
 
     Returns:
-        NDArray: Mean waveforms for each cluster. Shape (n_clusters, n_channels, pre_samples + post_samples)
-        NDArray: Std waveforms for each cluster. Shape (n_clusters, n_channels, pre_samples + post_samples)
-        dict[int, NDArray]: Spike waveforms for each cluster. NDArray shape (n_spikes, n_channels, pre_samples + post_samples)
+        NDArray: Mean waveforms for each cluster (uV). Shape (n_clusters, n_channels, pre_samples + post_samples) dtype float32
+        NDArray: Std waveforms for each cluster (uV). Shape (n_clusters, n_channels, pre_samples + post_samples) dtype float32
+        dict[int, NDArray]: Spike waveforms for each cluster (bits). NDArray shape (n_spikes, n_channels, pre_samples + post_samples) dtype int16
     """
     mean_wf_path = os.path.join(params["KS_folder"], "mean_waveforms.npy")
     std_wf_path = os.path.join(params["KS_folder"], "std_waveforms.npy")
@@ -226,59 +227,66 @@ def calc_mean_and_std_wf(
     spikes = {}
     if os.path.exists(mean_wf_path) and (not return_std or os.path.exists(std_wf_path)):
         mean_wf = np.load(mean_wf_path)
-        try:
-            std_wf = np.load(std_wf_path)
-        except FileNotFoundError:
-            std_wf = np.array([])
-        if np.any(np.isnan(mean_wf)):
-            mean_wf = np.nan_to_num(mean_wf, nan=0)
-            # save the fixed mean waveform
-            np.save(mean_wf_path, mean_wf)
+        # recalculate mean_wf if it is not the right shape
+        if mean_wf.shape[0] == n_clusters:
+            try:
+                std_wf = np.load(std_wf_path)
+            except FileNotFoundError:
+                std_wf = np.array([])
+            if np.any(np.isnan(mean_wf)):
+                mean_wf = np.nan_to_num(mean_wf, nan=0)
+                # save the fixed mean waveform
+                np.save(mean_wf_path, mean_wf)
 
-        if return_spikes:
-            # Extracting spikes is faster than saving and loading them from file
-            for i in tqdm(cluster_ids, desc="Loading spikes"):
-                spikes_i = extract_spikes(
-                    data,
-                    spike_times,
-                    i,
-                    params["pre_samples"],
-                    params["post_samples"],
-                    params["max_spikes"],
-                )
-                spikes[i] = spikes_i
+            if return_spikes:
+                # Extracting spikes is faster than saving and loading them from file
+                for i in tqdm(cluster_ids, desc="Loading spikes"):
+                    spikes_i = extract_spikes(
+                        data,
+                        spike_times,
+                        i,
+                        params["pre_samples"],
+                        params["post_samples"],
+                        params["max_spikes"],
+                    )
+                    spikes[i] = spikes_i
+            return mean_wf, std_wf, spikes
 
-    else:
-
-        mean_wf = cp.zeros(
-            (
-                n_clusters,
-                params["n_chan"],
-                params["pre_samples"] + params["post_samples"],
-            )
+    bits_to_uV = get_bits_to_uV_factor(params)  # convert from bits to uV
+    bits_to_uV = cp.float32(bits_to_uV)  # convert to cupy float32
+    mean_wf = cp.zeros(
+        (
+            n_clusters,
+            params["n_chan"],
+            params["pre_samples"] + params["post_samples"],
         )
-        std_wf = cp.zeros_like(mean_wf)
-        for i in tqdm(cluster_ids, desc="Calculating mean and std waveforms"):
-            spikes[i] = extract_spikes(
-                data,
-                spike_times,
-                i,
-                params["pre_samples"],
-                params["post_samples"],
-                params["max_spikes"],
-            )
-            if len(spikes[i]) > 0:  # edge case
-                spikes_cp = cp.array(spikes[i])
-                mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
-                std_wf[i, :, :] = cp.std(spikes_cp, axis=0)
+    )
+    std_wf = cp.zeros_like(mean_wf)
+    for i in tqdm(cluster_ids, desc="Calculating mean and std waveforms"):
+        spikes[i] = extract_spikes(
+            data,
+            spike_times,
+            i,
+            params["pre_samples"],
+            params["post_samples"],
+            params["max_spikes"],
+        )
+        if len(spikes[i]) > 0:  # edge case
+            spikes_cp = cp.array(spikes[i], dtype=cp.float32)
+            mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
+            std_wf[i, :, :] = cp.std(spikes_cp, axis=0)
 
-        tqdm.write("Saving mean and std waveforms...")
-        mean_wf *= get_bits_to_uV_factor(params)  # convert from bits to uV
-        cp.save(mean_wf_path, mean_wf)
-        cp.save(std_wf_path, std_wf)
-        # Convert to numpy arrays
-        mean_wf = cp.asnumpy(mean_wf)
-        std_wf = cp.asnumpy(std_wf)
+    # convert mean_wf and std_wf to uV
+    mean_wf *= bits_to_uV
+    std_wf *= bits_to_uV
+
+    tqdm.write("Saving mean and std waveforms...")
+    cp.save(mean_wf_path, mean_wf)
+    cp.save(std_wf_path, std_wf)
+
+    # Convert back to numpy arrays for compatibility
+    mean_wf = cp.asnumpy(mean_wf)
+    std_wf = cp.asnumpy(std_wf)
 
     return mean_wf, std_wf, spikes
 
