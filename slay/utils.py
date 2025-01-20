@@ -273,15 +273,18 @@ def calc_mean_and_std_wf(
         )
         if len(spikes[i]) > 0:  # edge case
             spikes_cp = cp.array(spikes[i], dtype=cp.float32)
-            spikes_cp *= bits_to_uV # convert from bits to uV
             mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
             std_wf[i, :, :] = cp.std(spikes_cp, axis=0)
+
+    # convert mean_wf and std_wf to uV
+    mean_wf *= bits_to_uV
+    std_wf *= bits_to_uV
 
     tqdm.write("Saving mean and std waveforms...")
     cp.save(mean_wf_path, mean_wf)
     cp.save(std_wf_path, std_wf)
 
-    # Convert back to numpy arrays
+    # Convert back to numpy arrays for compatibility
     mean_wf = cp.asnumpy(mean_wf)
     std_wf = cp.asnumpy(std_wf)
 
