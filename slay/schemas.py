@@ -248,35 +248,7 @@ class SimilarityParams(Schema):
     )
 
 
-class PlotParams(Schema):
-    class Meta:
-        unknown = INCLUDE
-
-    plot_corr_window_size = Float(
-        required=False,
-        missing=0.102,
-        description="Window size for correlation plot",
-    )
-    plot_corr_bin_size = Float(
-        required=False,
-        missing=0.001,
-        description="Bin size for correlation plot",
-    )
-    plot_overlap_tol = Float(
-        required=False,
-        missing=10 / 30000,
-        description="Overlap tolerance IN MS for correlation plot",
-    )
-
-
 class CustomMetricsParams(KSParams, WaveformParams):
-    class Meta:
-        unknown = INCLUDE
-
-    pass
-
-
-class PlotUnitsParams(KSParams, WaveformParams, PlotParams, CorrelogramParams):
     class Meta:
         unknown = INCLUDE
 
@@ -289,7 +261,6 @@ class RunParams(
     CorrelogramParams,
     RefractoryParams,
     SimilarityParams,
-    PlotParams,
 ):
     class Meta:
         unknown = INCLUDE
@@ -309,11 +280,6 @@ class RunParams(
         required=False,
         missing=10,
         description="Maximum distance between peak channels for a merge to be valid",
-    )
-    plot_merges = Boolean(
-        required=False,
-        missing=False,
-        description="True if merges should be plotted",
     )
     auto_accept_merges = Boolean(
         required=False,
