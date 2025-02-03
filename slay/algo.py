@@ -64,14 +64,12 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
 
-    mean_wf, std_wf, spikes = slay.calc_mean_and_std_wf(
+    mean_wf = slay.calc_mean_wf(
         params,
         n_clust,
         good_ids,
         times_multi,
         data,
-        return_std=params["plot_merges"],
-        return_spikes=True,
     )
 
     peak_chans = np.argmax(np.max(mean_wf, 2) - np.min(mean_wf, 2), 1)
@@ -186,12 +184,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         file.write(json.dumps(new2old, separators=(",\n", ":")))
 
     merges = list(new2old.values())
-
-    if params["plot_merges"]:
-        os.makedirs(
-            os.path.join(params["KS_folder"], "automerge", "merges"), exist_ok=True
-        )
-        slay.plot_merges(merges, times_multi, mean_wf, std_wf, spikes, params)
 
     t7 = time.time()
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))

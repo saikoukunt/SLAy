@@ -3,7 +3,6 @@ from slay.algo import run_merge
 from slay.autoencoder import CN_AE, SpikeDataset, generate_train_data, train_ae
 from slay.bursts import base_algo, find_bursts
 from slay.cluster_metrics import calc_wf_norms, wf_means_similarity
-from slay.plot import plot_corr, plot_merges, plot_wfs
 from slay.stages import (
     accept_all_merges,
     calc_ae_sim,
@@ -13,7 +12,7 @@ from slay.stages import (
     merge_clusters,
 )
 from slay.utils import (
-    calc_mean_and_std_wf,
+    calc_mean_wf,
     extract_spikes,
     find_best_channels,
     find_times_multi,
