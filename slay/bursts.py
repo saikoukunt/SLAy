@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 
 
 def base_algo(
-    spike_times: NDArray[np.float_], state_ratio: float = 5, gamma: float = 0.3
+    spike_times: NDArray[np.float64], state_ratio: float = 5, gamma: float = 0.3
 ) -> tuple[pd.DataFrame, NDArray[np.int_]]:
     """
     Uses the original Kleinberg algorithm to estimate the optimal HMM state sequence,
@@ -30,11 +30,11 @@ def base_algo(
 
 
 def find_bursts(
-    spike_times: NDArray[np.float_],
+    spike_times: NDArray[np.float64],
     state_ratio: float = 5,
     gamma: float = 0.3,
     max_iter: int = 5,
-) -> tuple[pd.DataFrame, NDArray[np.int_], NDArray[np.float_]]:
+) -> tuple[pd.DataFrame, NDArray[np.int_], NDArray[np.float64]]:
     """
     Uses our EM-Kleinberg algorithm to iteratively estimate HMM state firing rates
     and the optimal state sequence, and returns an interpretable output.
@@ -54,7 +54,7 @@ def find_bursts(
         a (NDArray): The inferred HMM state firing rates.
     """
     q, a = find_sequence(spike_times, state_ratio, gamma)
-    gaps: NDArray[np.float_] = np.diff(spike_times)
+    gaps: NDArray[np.float64] = np.diff(spike_times)
 
     max_level = -1
     ind = 1
@@ -70,7 +70,7 @@ def find_bursts(
             if inds.shape[0] == 0:  # Stop looking higher if a state is unused.
                 max_level: int = i
                 break
-            a_hat: NDArray[np.float_] = 1 / (
+            a_hat: NDArray[np.float64] = 1 / (
                 np.mean(gaps[inds])
             )  # MLE estimator for exponential dist
             a[i] = max(state_ratio * a[i - 1], a_hat)
@@ -84,15 +84,15 @@ def find_bursts(
 
     bursts: pd.DataFrame = create_output(spike_times, q)
 
-    return bursts, q, a[:max_level+1]
+    return bursts, q, a[: max_level + 1]
 
 
 def find_sequence(
-    spike_times: NDArray[np.float_],
+    spike_times: NDArray[np.float64],
     state_ratio: float,
     gamma: float,
-    frs: NDArray[np.float_] = None,
-) -> tuple[NDArray[np.int_], NDArray[np.float_]]:
+    frs: NDArray[np.float64] = None,
+) -> tuple[NDArray[np.int_], NDArray[np.float64]]:
     """
     Infers the optimal state sequence of Kleinberg HMM bursting states.
 
@@ -113,10 +113,10 @@ def find_sequence(
     """
 
     spike_times = np.sort(spike_times)
-    gaps: NDArray[np.float_] = np.diff(spike_times)
+    gaps: NDArray[np.float64] = np.diff(spike_times)
 
     # calculate base rate and number of HMM states (k)
-    T: np.float_ = np.sum(gaps)
+    T: np.float64 = np.sum(gaps)
     n: int = gaps.shape[0]
     base_fr: float = n / T  # type: ignore
 
@@ -135,11 +135,11 @@ def find_sequence(
     fire_pdf: Callable = lambda j, x: frs[j] * np.exp(-frs[j] * x)
 
     # Viterbi algorithm to estimate optimal state sequence
-    C: NDArray[np.float_] = np.zeros(k)  # cost
+    C: NDArray[np.float64] = np.zeros(k)  # cost
     q: NDArray[np.int_] = np.zeros((k, 1), dtype="int")  # state sequence
 
     for t in range(n):
-        Cprime: NDArray[np.float_] = np.zeros(k)
+        Cprime: NDArray[np.float64] = np.zeros(k)
         qprime: NDArray[np.int_] = np.zeros((k, t + 1), dtype="int")
 
         for j in range(k):
@@ -165,7 +165,9 @@ def find_sequence(
     return q, frs  # type: ignore
 
 
-def create_output(spike_times: NDArray[np.float_], q: NDArray[np.int_]) -> pd.DataFrame:
+def create_output(
+    spike_times: NDArray[np.float64], q: NDArray[np.int_]
+) -> pd.DataFrame:
     """
     Finds bursts (continuous portions with the same state) from an inferred state
     sequence.
@@ -197,8 +199,8 @@ def create_output(spike_times: NDArray[np.float_], q: NDArray[np.int_]) -> pd.Da
 
     # create output
     level: NDArray[np.int_] = np.zeros(N, dtype="int")
-    start: NDArray[np.float_] = np.zeros(N, dtype="float64")
-    end: NDArray[np.float_] = np.zeros(N, dtype="float64")
+    start: NDArray[np.float64] = np.zeros(N, dtype="float64")
+    end: NDArray[np.float64] = np.zeros(N, dtype="float64")
     bursts = pd.DataFrame({"level": level, "start": start, "end": end})
 
     # populate output

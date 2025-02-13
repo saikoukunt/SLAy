@@ -23,13 +23,13 @@ def calc_mean_sim(
     counts: NDArray[np.int_],
     n_clust: int,
     labels: pd.DataFrame,
-    mean_wf: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
     params: dict[str, Any],
 ) -> tuple[
-    NDArray[np.float_],
+    NDArray[np.float64],
     NDArray[np.int_],
-    NDArray[np.float_],
-    NDArray[np.float_],
+    NDArray[np.float64],
+    NDArray[np.float64],
     NDArray[np.bool_],
 ]:
     """
@@ -88,7 +88,7 @@ def calc_mean_sim(
 
 
 def calc_ae_sim(
-    mean_wf: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
     model: nn.Module,
     peak_chans: NDArray[np.int_],
     spk_data: slay.SpikeDataset,
@@ -97,7 +97,7 @@ def calc_ae_sim(
     zDim: int = 15,
     sf: int = 1,
 ) -> tuple[
-    NDArray[np.float_], NDArray[np.float_], NDArray[np.float_], NDArray[np.int_]
+    NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.int_]
 ]:
     """
     Calculates autoencoder-based cluster similarity.
@@ -208,11 +208,11 @@ def calc_ae_sim(
 
 
 def calc_xcorr_metric(
-    times_multi: list[NDArray[np.float_]],
+    times_multi: list[NDArray[np.float64]],
     n_clust: int,
     pass_ms: NDArray[np.bool_],
     params: dict[str, Any],
-) -> tuple[NDArray[np.float_], NDArray[np.float_], NDArray[np.float_]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """
     Calculates the cross-correlogram significance metric between each candidate pair of
     clusters.
@@ -258,7 +258,7 @@ def calc_xcorr_metric(
         x_olaps[c1, c2] = res[i][1]
 
     # compute metric
-    xcorr_sig: NDArray[np.float_] = np.zeros_like(pass_ms, dtype="float64")
+    xcorr_sig: NDArray[np.float64] = np.zeros_like(pass_ms, dtype="float64")
 
     for c1 in range(n_clust):
         for c2 in range(c1 + 1, n_clust):
@@ -279,12 +279,12 @@ def calc_xcorr_metric(
 
 
 def calc_ref_p(
-    times_multi: list[NDArray[np.float_]],
+    times_multi: list[NDArray[np.float64]],
     n_clust: int,
     pass_ms: NDArray[np.bool_],
-    xcorr_sig: NDArray[np.float_],
+    xcorr_sig: NDArray[np.float64],
     params: dict[str, Any],
-) -> tuple[NDArray[np.float_], NDArray[np.float_]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Calculates the cross-correlogram significance metric between each candidate pair of
     clusters.
@@ -338,8 +338,8 @@ def calc_ref_p(
 
 def merge_clusters(
     clusters: NDArray[np.int_],
-    mean_wf: NDArray[np.float_],
-    final_metric: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
+    final_metric: NDArray[np.float64],
     params: dict[str, Any],
 ) -> tuple[dict[int, int], dict[int, list[int]]]:
     """
@@ -433,7 +433,7 @@ def merge_clusters(
 def xcorr_func(
     c1: int,
     c2: int,
-    times_multi: list[NDArray[np.float_]],
+    times_multi: list[NDArray[np.float64]],
     params: dict[str, Any],
 ):
     """
@@ -469,7 +469,7 @@ def xcorr_func(
 def ref_p_func(
     c1: int,
     c2: int,
-    times_multi: list[NDArray[np.float_]],
+    times_multi: list[NDArray[np.float64]],
     params: dict[str, Any],
 ) -> tuple[float, float]:
     """

@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 
 def bin_spike_trains(
     c1_times: NDArray[np.int_], c2_times: NDArray[np.int_], bin_width: float
-) -> tuple[NDArray[np.float_], NDArray[np.float_]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Splits two input spike trains into bins.
 
@@ -24,10 +24,10 @@ def bin_spike_trains(
         c1_counts (NDArray): Binned spike counts
         c2_counts (NDArray): Binned spike counts.
     """
-    c1_counts: NDArray[np.float_] = np.zeros(
+    c1_counts: NDArray[np.float64] = np.zeros(
         (math.ceil(max(c1_times) / bin_width)), dtype="int32"
     )
-    c2_counts: NDArray[np.float_] = np.zeros(
+    c2_counts: NDArray[np.float64] = np.zeros(
         (math.ceil(max(c2_times) / bin_width)), dtype="int32"
     )
 
@@ -40,12 +40,12 @@ def bin_spike_trains(
 
 
 def x_correlogram(
-    c1_times: NDArray[np.float_],
-    c2_times: NDArray[np.float_],
+    c1_times: NDArray[np.float64],
+    c2_times: NDArray[np.float64],
     window_size: float,
     bin_width: float,
     overlap_tol: float,
-) -> tuple[NDArray[np.float_], int]:
+) -> tuple[NDArray[np.float64], int]:
     """
     Calculates the cross correlogram between two spike trains.
 
@@ -105,11 +105,11 @@ def x_correlogram(
 
 
 def auto_correlogram(
-    c1_times: NDArray[np.float_],
+    c1_times: NDArray[np.float64],
     window_size: float,
     bin_width: float,
     overlap_tol: float,
-) -> NDArray[np.float_]:
+) -> NDArray[np.float64]:
     """
     Calculates the auto correlogram for a spike train.
 
@@ -161,8 +161,8 @@ def auto_correlogram(
 
 
 def xcorr_sig(
-    xgram: NDArray[np.float_],
-    null_xgram: NDArray[np.float_],
+    xgram: NDArray[np.float64],
+    null_xgram: NDArray[np.float64],
     window_size: float,
     xcorr_bin_width: float,
     max_window: float,
@@ -194,8 +194,8 @@ def xcorr_sig(
     num_bins_half: int = math.ceil(round(window_size / xcorr_bin_width) / 2)
     start_idx = int(xgram.shape[0] / 2 - num_bins_half)
     end_idx = int(xgram.shape[0] / 2 - 1 + num_bins_half)
-    xgram_win: NDArray[np.float_] = xgram[start_idx : end_idx + 1]
-    null_win: NDArray[np.float_] = null_xgram[start_idx : end_idx + 1]
+    xgram_win: NDArray[np.float64] = xgram[start_idx : end_idx + 1]
+    null_win: NDArray[np.float64] = null_xgram[start_idx : end_idx + 1]
 
     # If the ccg doesn't contain enough spikes, we double the window size until
     # it does, or until window_size == max_window.

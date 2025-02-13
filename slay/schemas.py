@@ -118,7 +118,7 @@ class WaveformParams(Schema):
         String,
         required=False,
         cli_as_single_argument=True,
-        missing=["good", "mua"],
+        missing=["good"],
         description="Cluster labels that denote non-noise clusters.",
     )
 

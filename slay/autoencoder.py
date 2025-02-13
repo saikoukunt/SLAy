@@ -15,7 +15,7 @@ import slay
 def generate_train_data(
     data: NDArray[np.int_],
     ci: dict[str, Any],
-    channel_pos: NDArray[np.float_],
+    channel_pos: NDArray[np.float64],
     ext_params: dict[str, Any],
     params: dict[str, Any],
 ) -> tuple[torch.Tensor, NDArray[np.int_]]:

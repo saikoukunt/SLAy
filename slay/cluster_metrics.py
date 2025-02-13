@@ -9,7 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-def calc_wf_norms(wfs: NDArray[np.float_]) -> NDArray[np.float_]:
+def calc_wf_norms(wfs: NDArray[np.float64]) -> NDArray[np.float64]:
     """
     Calculates the Frobenius norm of each waveform in an array of waveforms.
 
@@ -30,11 +30,11 @@ def calc_wf_norms(wfs: NDArray[np.float_]) -> NDArray[np.float_]:
 
 
 def wf_means_similarity(
-    mean_wf: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
     cl_good: NDArray[np.bool_],
     use_jitter,
     max_jitter,
-) -> tuple[NDArray[np.float_], NDArray[np.float_], NDArray[np.int_]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.int_]]:
     """
     Calculates the normalized pairwise similarity (inner product) between pairs of
     waveforms in an array of waveforms.
@@ -59,15 +59,15 @@ def wf_means_similarity(
             max inner product for each pair of waveforms.
     """
     n_clust: int = mean_wf.shape[0]
-    mean_sim: NDArray[np.float_] = np.zeros((n_clust, n_clust))
+    mean_sim: NDArray[np.float64] = np.zeros((n_clust, n_clust))
     shifts: NDArray[np.int_] = np.zeros((n_clust, n_clust), dtype="int16")
-    wf_norms: NDArray[np.float_] = calc_wf_norms(mean_wf)
+    wf_norms: NDArray[np.float64] = calc_wf_norms(mean_wf)
 
     for i in range(n_clust):
         for j in range(n_clust):
             if cl_good[i] and cl_good[j]:
                 if i != j:
-                    norm: NDArray[np.float_] = max(wf_norms[i], wf_norms[j])
+                    norm: NDArray[np.float64] = max(wf_norms[i], wf_norms[j])
                     if norm == 0:
                         continue
 
@@ -86,7 +86,7 @@ def wf_means_similarity(
 
 
 def find_jitter(
-    m1: NDArray[np.float_], m2: NDArray[np.float_], max_jitter: int
+    m1: NDArray[np.float64], m2: NDArray[np.float64], max_jitter: int
 ) -> tuple[float, int]:
     """
     Finds the time shift that maximizes the inner product between two waveforms.
@@ -111,11 +111,11 @@ def find_jitter(
 
     for i in range(-1 * max_jitter, max_jitter + 1):
         if i < 0:
-            c1_shift: NDArray[np.float_] = m1[:, : t_length + i]
-            c2_shift: NDArray[np.float_] = m2[:, i * -1 :]
+            c1_shift: NDArray[np.float64] = m1[:, : t_length + i]
+            c2_shift: NDArray[np.float64] = m2[:, i * -1 :]
         else:
             c1_shift = m1[:, i:]
-            c2_shift: NDArray[np.float_] = m2[:, : t_length - i]
+            c2_shift: NDArray[np.float64] = m2[:, : t_length - i]
 
         off_sim: float = np.dot(c1_shift.flatten(), c2_shift.flatten())
         if off_sim > mean_sim:

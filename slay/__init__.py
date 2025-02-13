@@ -17,5 +17,6 @@ from slay.utils import (
     parse_cmd_line_args,
     parse_kilosort_params,
     spikes_per_cluster,
+    load_ks_files,
 )
 from slay.xcorr import auto_correlogram, bin_spike_trains, x_correlogram, xcorr_sig

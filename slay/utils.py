@@ -7,13 +7,11 @@ Assumes that ephys data is stored in the phy output format.
 import argparse
 import json
 import os
-from pathlib import Path
 from typing import Any
 
-import cupy as cp
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
-from scipy import stats
 from scipy.stats import wasserstein_distance
 from tqdm import tqdm
 
@@ -77,6 +75,73 @@ def parse_kilosort_params(args: dict) -> dict[str, Any]:
     return args
 
 
+def load_ks_files(params):
+    """
+    Load and process Kilosort output files and ephys recording data.
+
+    Args:
+        params (dict[str, Any]): Dictionary containing the following keys:
+            - "KS_folder" (str): Path to the folder containing Kilosort output files.
+            - "data_filepath" (str): Path to the ephys recording data file.
+            - "dtype" (str): Data type of the ephys recording.
+            - "n_chan" (int): Number of channels in the ephys recording.
+            - "pre_samples" (int): Number of samples before the spike peak.
+            - "post_samples" (int): Number of samples after the spike peak.
+
+    Returns:
+        clusters (NDArray[np.int_]): Array of cluster IDs for each spike.
+        cl_labels (pd.DataFrame): DataFrame containing cluster labels.
+        channel_pos (NDArray[np.float_]): Array of channel positions.
+        data (NDArray[np.int_]): Reshaped ephys recording data.
+        n_clust (int): Number of clusters.
+        times_multi (list[NDArray[np.float64]]): List of arrays containing spike times for each cluster.
+        counts (NDArray[np.int_]): Array containing the number of spikes for each cluster.
+    """
+
+    os.makedirs(os.path.join(params["KS_folder"], "automerge"), exist_ok=True)
+
+    # Load sorting and recording info.
+    tqdm.write("Loading files...")
+    times: NDArray[np.float_] = np.load(
+        os.path.join(params["KS_folder"], "spike_times.npy")
+    ).flatten()
+    clusters: NDArray[np.int_] = np.load(
+        os.path.join(params["KS_folder"], "spike_clusters.npy")
+    ).flatten()
+    cl_labels: pd.DataFrame = pd.read_csv(
+        os.path.join(params["KS_folder"], "cluster_group.tsv"),
+        sep="\t",
+        index_col="cluster_id",
+    )
+
+    channel_pos: NDArray[np.float_] = np.load(
+        os.path.join(params["KS_folder"], "channel_positions.npy")
+    )
+
+    if "label" not in cl_labels.columns:
+        try:
+            cl_labels["label"] = cl_labels["KSLabel"]
+        except KeyError:
+            cl_labels["label"] = cl_labels["group"]
+
+    # Compute useful cluster info.
+    # Load the ephys recording.
+    rawData = np.memmap(params["data_filepath"], dtype=params["dtype"], mode="r")
+    data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
+
+    n_clust = clusters.max() + 1
+    times_multi = slay.find_times_multi(
+        times,
+        clusters,
+        np.arange(n_clust),
+        data,
+        params["pre_samples"],
+        params["post_samples"],
+    )
+    counts = np.array([len(times_multi[i]) for i in range(n_clust)])
+    return clusters, cl_labels, channel_pos, data, n_clust, times_multi, counts
+
+
 def spikes_per_cluster(sp_clust: NDArray[np.int_]) -> NDArray[np.int_]:
     """
     Counts the number of spikes in each cluster.
@@ -98,7 +163,7 @@ def spikes_per_cluster(sp_clust: NDArray[np.int_]) -> NDArray[np.int_]:
 
 ### @internal
 def get_closest_channels(
-    channel_positions: NDArray[np.float_], ref_chan: int, num_close: int | None = None
+    channel_positions: NDArray[np.float64], ref_chan: int, num_close: int | None = None
 ) -> NDArray[np.int_]:
     """
     Gets the channels closest to a specified channel on the probe.
@@ -118,7 +183,7 @@ def get_closest_channels(
     x, y = channel_positions[:, 0], channel_positions[:, 1]
     x0, y0 = channel_positions[ref_chan]
 
-    dists: NDArray[np.float_] = (x - x0) ** 2 + (y - y0) ** 2
+    dists: NDArray[np.float64] = (x - x0) ** 2 + (y - y0) ** 2
     close_chans = np.argsort(dists)
     if num_close:
         close_chans = close_chans[:num_close]
@@ -126,8 +191,8 @@ def get_closest_channels(
 
 
 def find_best_channels(
-    template: NDArray[np.float_],
-    channel_pos: NDArray[np.float_],
+    template: NDArray[np.float64],
+    channel_pos: NDArray[np.float64],
     n_chan: int,
     num_close: int,
 ) -> tuple[NDArray[np.int_], int]:
@@ -148,7 +213,7 @@ def find_best_channels(
         peak_chan (int): The index of the peak channel.
 
     """
-    amplitude: NDArray[np.float_] = template.max(axis=1) - template.min(axis=1)
+    amplitude: NDArray[np.float64] = template.max(axis=1) - template.min(axis=1)
     peak_channel: int = min(int(np.argmax(amplitude)), n_chan - 3)
     close_chans: NDArray[np.int_] = get_closest_channels(
         channel_pos, peak_channel, num_close
@@ -158,10 +223,10 @@ def find_best_channels(
 
 
 def get_dists(
-    channel_positions: NDArray[np.float_],
+    channel_positions: NDArray[np.float64],
     ref_chan: int,
     target_chans: NDArray[np.int_],
-) -> NDArray[np.float_]:
+) -> NDArray[np.float64]:
     """
     Calculates the distance from a specified channel on the probe to a set of
     target channels.
@@ -176,13 +241,13 @@ def get_dists(
         dists (NDArray): Distances to each of the target channels, in the same
             order as `target_chans`.
     """
-    x: NDArray[np.float_] = channel_positions[:, 0]
-    y: NDArray[np.float_] = channel_positions[:, 1]
+    x: NDArray[np.float64] = channel_positions[:, 0]
+    y: NDArray[np.float64] = channel_positions[:, 1]
     x0: float
     y0: float
 
     x0, y0 = channel_positions[ref_chan]
-    dists: NDArray[np.float_] = (x - x0) ** 2 + (y - y0) ** 2
+    dists: NDArray[np.float64] = (x - x0) ** 2 + (y - y0) ** 2
     dists = dists[target_chans]
     return dists
 
@@ -239,10 +304,10 @@ def calc_fr_unif(
 def temp_mismatch(
     clust_id: int,
     templates: list,
-    channel_pos: NDArray[np.float_],
+    channel_pos: NDArray[np.float64],
     n_chan: int,
     num_close: int,
-    mean_wf: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
 ) -> float:
     """
     Calculate the temporal mismatch between the proximity ranks and amplitude ranks of a given cluster.
