@@ -12,10 +12,7 @@ from slay.stages import (
     merge_clusters,
 )
 from slay.utils import (
-    calc_mean_wf,
-    extract_spikes,
     find_best_channels,
-    find_times_multi,
     get_dists,
     parse_cmd_line_args,
     parse_kilosort_params,

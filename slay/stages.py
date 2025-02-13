@@ -622,14 +622,14 @@ def accept_merge(
     new_mean_wf[:old_rows_i, :, :] = mean_wf[:old_rows_i, :, :]  # If get partial save
     new_mean_wf[new_id, :, :] = weighted_mean_wf
 
-    # calculate new metrics
-    cl_labels.loc[old_ids, "label"] = "merged"
-    cl_labels.loc[old_ids, "label_reason"] = f"merged into cluster_id {new_id}"
-
     # add new row
     cl_labels.loc[new_id, "label"] = cl_labels.loc[old_ids, "label"].mode().values[0]
     cl_labels.loc[new_id, "label_reason"] = f"merged from cluster_ids {old_ids}"
     new_spike_clusters[np.isin(new_spike_clusters, old_ids)] = new_id
+
+    # calculate new metrics
+    cl_labels.loc[old_ids, "label"] = "merged"
+    cl_labels.loc[old_ids, "label_reason"] = f"merged into cluster_id {new_id}"
 
     return new_mean_wf, cl_labels, new_spike_times, new_spike_clusters
 
@@ -640,15 +640,20 @@ def remove_duplicate_spikes(
     combined_spike_times = times_multi[old_ids[0]]
     for old_id in old_ids[1:]:
         # add spike times that are NOT within 5 samples of each other
-        combined_spike_times = np.concatenate(
-            [combined_spike_times, times_multi[old_id]]
-        )
+        old_times = times_multi[old_id]
+        combined_spike_times = np.concatenate([combined_spike_times, old_times])
         combined_spike_times = np.sort(combined_spike_times)
 
-        duplicate_idxs = np.where(np.diff(combined_spike_times) <= n_samples)[0]
-        duplicate_idxs += 1  # delete the second of the duplicates
-        duplicate_times = combined_spike_times[duplicate_idxs]
+        duplicate_mask = np.diff(combined_spike_times) <= n_samples
+        first_duplicates = combined_spike_times[:-1][duplicate_mask]
+        second_duplicates = combined_spike_times[1:][duplicate_mask]
+        all_duplicates = np.concatenate([first_duplicates, second_duplicates])
+        duplicate_times = np.intersect1d(
+            old_times, all_duplicates
+        )  # get times from old_id that are duplicates
 
+        # delete duplicate times from combined_spike_times
+        duplicate_idxs = np.where(np.isin(combined_spike_times, duplicate_times))[0]
         combined_spike_times = np.delete(combined_spike_times, duplicate_idxs)
 
         # find index where spike_time is duplicate and spike_cluster is old_ids
@@ -656,6 +661,7 @@ def remove_duplicate_spikes(
         duplicate_idxs = np.where(np.isin(spike_times, duplicate_times))[0]
         duplicate_idxs = np.intersect1d(cluster_idxs, duplicate_idxs)
 
+        assert len(duplicate_idxs) == len(duplicate_times)
         # for each duplicate spike, remove associated spike_time and spike_cluster
         spike_times = np.delete(spike_times, duplicate_idxs)
         spike_clusters = np.delete(spike_clusters, duplicate_idxs)
