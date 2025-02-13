@@ -3,6 +3,7 @@ import os
 import time
 from typing import Any
 
+import npx_utils as npx
 import numpy as np
 import pandas as pd
 import torch
@@ -48,7 +49,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = slay.find_times_multi(
+    times_multi = npx.find_times_multi(
         times,
         clusters,
         np.arange(n_clust),
@@ -56,7 +57,9 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         params["pre_samples"],
         params["post_samples"],
     )
-    counts = np.array([len(times_multi[i]) for i in range(n_clust)])
+    counts = np.zeros(n_clust, dtype=int)
+    for k, v in times_multi.items():
+        counts[k] = len(v)
 
     # update cl_labels to be list with all cluster_ids
     cl_labels = cl_labels.reindex(np.arange(n_clust))
@@ -64,7 +67,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
 
-    mean_wf = slay.calc_mean_wf(
+    mean_wf = npx.calc_mean_wf(
         params,
         n_clust,
         good_ids,
@@ -182,8 +185,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         os.path.join(params["KS_folder"], "automerge", "new2old.json"), "w"
     ) as file:
         file.write(json.dumps(new2old, separators=(",\n", ":")))
-
-    merges = list(new2old.values())
 
     t7 = time.time()
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))
