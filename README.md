@@ -4,7 +4,7 @@
 
 
 ## Installation Instructions
-To avoid switching environments between spike sorting and postprocessing, we recommend using SLAy with the CILANtro pipeline (installation instructions [here](https://github.com/NP-HarrisLab/CILANtro)). If you want to run SLAy as a standalone tool, use the installation instructions below.
+To fully automate your spike sorting pipeline and avoid switching environments between spike sorting and postprocessing, we recommend using SLAy with the CILANtro pipeline (installation instructions [here](https://github.com/NP-HarrisLab/CILANtro)). If you want to run SLAy as a standalone tool, use the installation instructions below.
 
 1. Create a new conda environment
    ```bash
