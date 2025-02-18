@@ -237,25 +237,22 @@ def calc_xcorr_metric(
         xcorr_func, times_multi=times_multi, params=params
     )
 
-    # run cross correlogram jobs
-    pool = mp.Pool(mp.cpu_count())  # type: ignore
+    # run cross correlogram jobsW
     args = []
     for c1 in range(n_clust):
         for c2 in range(c1 + 1, n_clust):
             if pass_ms[c1, c2]:
                 args.append((c1, c2))
-    res = pool.starmap(xcorr_job, args)
+    with mp.Pool(mp.cpu_count()) as pool:
+        res = pool.starmap(xcorr_job, args)
 
     # convert cross correlogram output to np arrays
     xgrams = np.empty_like(pass_ms, dtype="object")
-    x_olaps = np.zeros_like(pass_ms, dtype="int16")
-    null_xgrams = np.empty_like(pass_ms, dtype="object")
 
     for i in range(len(res)):
         c1 = args[i][0]
         c2 = args[i][1]
-        xgrams[c1, c2] = res[i][0]
-        x_olaps[c1, c2] = res[i][1]
+        xgrams[c1, c2] = res[i]
 
     # compute metric
     xcorr_sig: NDArray[np.float64] = np.zeros_like(pass_ms, dtype="float64")
@@ -265,17 +262,15 @@ def calc_xcorr_metric(
             if pass_ms[c1, c2]:
                 xcorr_sig[c1, c2] = slay.xcorr_sig(
                     xgrams[c1, c2],
-                    null_xgram=np.ones_like(xgrams[c1, c2]),
                     window_size=params["window_size"],
                     xcorr_bin_width=params["xcorr_bin_width"],
-                    max_window=params["max_window"],
                     min_xcorr_rate=params["min_xcorr_rate"],
                 )
     for c1 in range(n_clust):
         for c2 in range(c1 + 1, n_clust):
             xcorr_sig[c2, c1] = xcorr_sig[c1, c2]
 
-    return xcorr_sig, xgrams, null_xgrams
+    return xcorr_sig, xgrams
 
 
 def calc_ref_p(
@@ -321,19 +316,15 @@ def calc_ref_p(
 
     # convert output to numpy arrays
     ref_pen = np.zeros_like(pass_ms, dtype="float64")
-    ref_per = np.zeros_like(pass_ms, dtype="float64")
 
     for i in range(len(res)):
         c1 = args[i][0]
         c2 = args[i][1]
 
-        ref_pen[c1, c2] = res[i][0]
-        ref_pen[c2, c1] = res[i][0]
+        ref_pen[c1, c2] = res[i]
+        ref_pen[c2, c1] = res[i]
 
-        ref_per[c1, c2] = res[i][1]
-        ref_per[c2, c1] = res[i][1]
-
-    return ref_pen, ref_per
+    return ref_pen
 
 
 def merge_clusters(
@@ -455,7 +446,6 @@ def xcorr_func(
     # extract spike times
     c1_times = times_multi[c1] / params["sample_rate"]
     c2_times = times_multi[c2] / params["sample_rate"]
-
     # compute xgrams
     return npx.x_correlogram(
         c1_times,
@@ -500,7 +490,7 @@ def ref_p_func(
         window_size=2,
         bin_width=params["ref_pen_bin_width"] / 1000,
         overlap_tol=params["overlap_tol"],
-    )[0]
+    )
 
     return npx.metrics._sliding_RP_viol(
         ccg, params["ref_pen_bin_width"], params["max_viol"]

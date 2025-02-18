@@ -9,6 +9,7 @@ import json
 import os
 from typing import Any
 
+import npx_utils as npx
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
@@ -130,7 +131,7 @@ def load_ks_files(params):
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = slay.find_times_multi(
+    times_multi = npx.find_times_multi(
         times,
         clusters,
         np.arange(n_clust),

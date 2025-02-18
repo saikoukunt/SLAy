@@ -145,13 +145,13 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
     # Calculate a significance metric for cross-correlograms.
     tqdm.write("Calculating cross-correlation metric...")
-    xcorr_sig, _, _ = slay.calc_xcorr_metric(times_multi, n_clust, pass_ms, params)
+    xcorr_sig, _ = slay.calc_xcorr_metric(times_multi, n_clust, pass_ms, params)
 
     t4 = time.time()
     xcorr_time = time.strftime("%H:%M:%S", time.gmtime(t4 - t1))
     # Calculate a refractor period penalty.
     tqdm.write("Calculating refractory period penalty...")
-    ref_pen, _ = slay.calc_ref_p(times_multi, n_clust, pass_ms, xcorr_sig, params)
+    ref_pen = slay.calc_ref_p(times_multi, n_clust, pass_ms, xcorr_sig, params)
     t5 = time.time()
     ref_pen_time = time.strftime("%H:%M:%S", time.gmtime(t5 - t4))
 
@@ -169,8 +169,37 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             final_metric[c1, c2] = max(met, 0)
             final_metric[c2, c1] = max(met, 0)
 
-    # Calculate/perform merges.
-    tqdm.write("Merging...")
+    # Create a dataframe with the metric values for each candidate pair
+    candidate_idxs = np.argwhere(pass_ms)
+    c1_ids, c2_ids = candidate_idxs[:, 0], candidate_idxs[:, 1]
+    candidate_sim = sim[c1_ids, c2_ids]
+    candidate_xcorr_sig = xcorr_sig[c1_ids, c2_ids]
+    candidate_ref_pen = ref_pen[c1_ids, c2_ids]
+    candidate_final_metric = final_metric[c1_ids, c2_ids]
+
+    candidate_metrics = pd.DataFrame(
+        {
+            "Cluster 1": c1_ids,
+            "Cluster 2": c2_ids,
+            "Similarity": candidate_sim,
+            "Cross-correlation Significance": candidate_xcorr_sig,
+            "Refractory Period Penalty": candidate_ref_pen,
+            "Final Metric": candidate_final_metric,
+        }
+    )
+    candidate_metrics = candidate_metrics.sort_values(
+        by="Final Metric", ascending=False
+    )
+
+    # Save the dataframe as metrics.tsv in the automerge folder
+    candidate_metrics.to_csv(
+        os.path.join(params["KS_folder"], "automerge", "metrics.tsv"),
+        sep="\t",
+        index=False,
+    )
+
+    # Calculate merges.
+    tqdm.write("Calculating merge suggestions...")
     old2new, new2old = slay.merge_clusters(clusters, mean_wf, final_metric, params)
 
     t6 = time.time()

@@ -13,6 +13,9 @@ def main(args: dict = None) -> None:
     vals, mst, xct, rpt, mt, tt, num_merge, oc = slay.run_merge(params)
     if params["auto_accept_merges"]:
         slay.accept_all_merges(vals, params)
+    else:
+        pass
+        ### add plotting
 
     output: dict[str, Any] = {
         "mean_time": mst,

@@ -5,9 +5,9 @@ Functions to efficiently calculate auto- and cross- correlograms.
 import math
 
 import numpy as np
-from scipy.signal import sosfiltfilt, butter, find_peaks_cwt
-from scipy.stats import wasserstein_distance
 from numpy.typing import NDArray
+from scipy.signal import butter, find_peaks_cwt, sosfiltfilt
+from scipy.stats import wasserstein_distance
 
 
 def bin_spike_trains(
@@ -93,17 +93,22 @@ def xcorr_sig(
         xgram_sum = xgram_window.sum()
         window_size = xgram_window.shape[0] * xcorr_bin_width
         ind += 1
+    # use the whole ccg if peak finding fails
+    if ind == starts.shape[0]:
+        xgram_window = xgram
 
-    sig = 0
-    if ind != starts.shape[0]:
-        sig = (
-            wasserstein_distance(
-                np.arange(xgram_window.shape[0]) / xgram_window.shape[0],
-                np.arange(xgram_window.shape[0]) / xgram_window.shape[0],
-                xgram_window,
-                np.ones_like(xgram_window),
-            )
-            * 4
+    sig = (
+        wasserstein_distance(
+            np.arange(xgram_window.shape[0]) / xgram_window.shape[0],
+            np.arange(xgram_window.shape[0]) / xgram_window.shape[0],
+            xgram_window,
+            np.ones_like(xgram_window),
         )
+        * 4
+    )
+
+    # apply a penalty if we had to use the whole ccg and event count is too low
+    if (ind == starts.shape[0]) and xgram_window.sum() < (min_xcorr_rate * window_size):
+        sig *= (xgram_window.sum() / (min_xcorr_rate * window_size)) ** 2
 
     return sig
