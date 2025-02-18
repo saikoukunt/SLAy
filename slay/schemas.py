@@ -137,7 +137,7 @@ class CorrelogramParams(Schema):
     )
     xcorr_bin_width = Float(
         required=False,
-        missing=0.0005,
+        missing=0.00025,
         description="The width in seconds of bins for cross correlogram calculation",
     )
     overlap_tol = Float(

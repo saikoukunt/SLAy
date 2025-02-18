@@ -5,7 +5,8 @@ Functions to efficiently calculate auto- and cross- correlograms.
 import math
 
 import numpy as np
-import scipy
+from scipy.signal import sosfiltfilt, butter, find_peaks_cwt
+from scipy.stats import wasserstein_distance
 from numpy.typing import NDArray
 
 
@@ -41,10 +42,8 @@ def bin_spike_trains(
 
 def xcorr_sig(
     xgram: NDArray[np.float64],
-    null_xgram: NDArray[np.float64],
     window_size: float,
     xcorr_bin_width: float,
-    max_window: float,
     min_xcorr_rate: float,
 ) -> float:
     """
@@ -58,8 +57,6 @@ def xcorr_sig(
 
     Args:
         xgram (NDArray): The raw cross-correlogram for the cluster pair.
-        null_dist (NDArray): The null cross-correlogram for the cluster pair.
-            In practice, this is usually a uniform distribution.
         window_size (float): The width in seconds of the default ccg window.
         xcorr_bin_width (float): The width in seconds of the bin size of the
             input ccgs.
@@ -70,42 +67,43 @@ def xcorr_sig(
     Returns:
         sig (float): The calculated cross-correlation significance metric.
     """
-    num_bins_half: int = math.ceil(round(window_size / xcorr_bin_width) / 2)
-    start_idx = int(xgram.shape[0] / 2 - num_bins_half)
-    end_idx = int(xgram.shape[0] / 2 - 1 + num_bins_half)
-    xgram_win: NDArray[np.float64] = xgram[start_idx : end_idx + 1]
-    null_win: NDArray[np.float64] = null_xgram[start_idx : end_idx + 1]
+    # calculate low-pass filtered second derivative of ccg
+    sos = butter(4, 1 / 5, output="sos")
+    xgram_filt = sosfiltfilt(sos, xgram)
+    xgram_2d = np.diff(xgram_filt, 2)
+    sos = butter(4, 1 / 10, output="sos")
+    xgram_2d = sosfiltfilt(sos, xgram_2d)
 
-    # If the ccg doesn't contain enough spikes, we double the window size until
-    # it does, or until window_size == max_window.
-    while (xgram_win.sum() < min_xcorr_rate * window_size) and (
-        window_size < max_window
-    ):
-        window_size = min(max_window, 2 * window_size)
-        num_bins_half = math.ceil(round(window_size / xcorr_bin_width) / 2)
-        start_idx = int(xgram.shape[0] / 2 - num_bins_half)
-        end_idx = int(xgram.shape[0] / 2 - 1 + num_bins_half)
-        xgram_win = xgram[start_idx : end_idx + 1]
-        null_win = null_xgram[start_idx : end_idx + 1]
-    if (xgram_win.sum() == 0) or (null_win.sum() == 0):
-        return 0
+    # find negative peaks of second derivative of ccg, these are the edges of dips in ccg
+    peaks = find_peaks_cwt(-xgram_2d, 15, noise_perc=90) + 1
+    peaks = np.abs(peaks - xgram.shape[0] / 2)
+    peaks = peaks[peaks > 7]
+    min_peaks = np.sort(peaks)
 
-    # To normalize the wasserstein distance, we divide by 0.25, which is the
-    # wasserstein distance between uniform and delta distributions.
-    num_bins_half *= 2
-    sig: float = (
-        scipy.stats.wasserstein_distance(
-            np.arange(num_bins_half) / num_bins_half,
-            np.arange(num_bins_half) / num_bins_half,
-            xgram_win,
-            null_win,
+    # start with peaks closest to 0 and move to the next set of peaks if the event count is too low
+    window_width = min_peaks * 1.5
+    starts = np.maximum(xgram.shape[0] / 2 - window_width, 0)
+    ends = np.minimum(xgram.shape[0] / 2 + window_width, xgram.shape[0] - 1)
+    ind = 0
+    xgram_window = xgram[int(starts[0]) : int(ends[0] + 1)]
+    xgram_sum = xgram_window.sum()
+    window_size = xgram_window.shape[0] * xcorr_bin_width
+    while (xgram_sum < (min_xcorr_rate * window_size * 10)) and (ind < starts.shape[0]):
+        xgram_window = xgram[int(starts[ind]) : int(ends[ind] + 1)]
+        xgram_sum = xgram_window.sum()
+        window_size = xgram_window.shape[0] * xcorr_bin_width
+        ind += 1
+
+    sig = 0
+    if ind != starts.shape[0]:
+        sig = (
+            wasserstein_distance(
+                np.arange(xgram_window.shape[0]) / xgram_window.shape[0],
+                np.arange(xgram_window.shape[0]) / xgram_window.shape[0],
+                xgram_window,
+                np.ones_like(xgram_window),
+            )
+            * 4
         )
-        / 0.25
-    )
-
-    # Low spike count penalty is the squared ratio of the observed spikes to the minimum
-    # number of spikes.
-    if xgram_win.sum() < (min_xcorr_rate * window_size):
-        sig *= (xgram_win.sum() / (min_xcorr_rate * window_size)) ** 2
 
     return sig
