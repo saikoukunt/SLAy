@@ -19,4 +19,4 @@ from slay.utils import (
     spikes_per_cluster,
     load_ks_files,
 )
-from slay.xcorr import auto_correlogram, bin_spike_trains, x_correlogram, xcorr_sig
+from slay.xcorr import bin_spike_trains, xcorr_sig

@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import slay
+import npx_utils as npx
 
 
 def calc_mean_sim(
@@ -457,7 +458,7 @@ def xcorr_func(
     c2_times = times_multi[c2] / params["sample_rate"]
 
     # compute xgrams
-    return slay.x_correlogram(
+    return npx.x_correlogram(
         c1_times,
         c2_times,
         params["max_window"],
@@ -498,7 +499,7 @@ def ref_p_func(
     c2_times = times_multi[c2] / params["sample_rate"]
 
     # Calculate cross-correlogram.
-    ccg = slay.x_correlogram(
+    ccg = npx.x_correlogram(
         c1_times,
         c2_times,
         window_size=2,
