@@ -17,7 +17,7 @@ To fully automate your spike sorting pipeline and avoid switching environments b
     conda install scipy argparse numpy pandas scikit-learn matplotlib
     pip install cupy-cuda12x marshmallow
     ```
-3. Install [npx_utils]()
+3. Install [npx_utils](https://github.com/NP-HarrisLab/npx_utils)
    ```bash
    *navigate to desired folder*
    git clone https://github.com/NP-HarrisLab/npx_utils.git
