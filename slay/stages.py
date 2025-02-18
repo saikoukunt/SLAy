@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import slay
-import npx_utils as npx
 
 
 def calc_mean_sim(
@@ -451,7 +450,7 @@ def xcorr_func(
         ccg (NDArray): The computed cross-correlogram.
 
     """
-    import slay as slay
+    import npx_utils as npx
 
     # extract spike times
     c1_times = times_multi[c1] / params["sample_rate"]
@@ -488,11 +487,7 @@ def ref_p_func(
         ref_per (float): The inferred refractory period.
 
     """
-
-    import numpy as np
-    from scipy.stats import poisson
-
-    import slay as slay
+    import npx_utils as npx
 
     # Extract spike times.
     c1_times = times_multi[c1] / params["sample_rate"]
@@ -507,37 +502,9 @@ def ref_p_func(
         overlap_tol=params["overlap_tol"],
     )[0]
 
-    # Average the halves of the cross-correlogram.
-    half_len = int(ccg.shape[0] / 2)
-    ccg[half_len:] = (ccg[half_len:] + ccg[:half_len][::-1]) / 2
-    ccg = ccg[half_len:]
-
-    # Only test a few refractory period sizes.
-    bTestIdx = np.array([1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20])
-    bTest = bTestIdx * params["ref_pen_bin_width"] / 1000
-    bTestIdx = bTestIdx[bTest <= 0.01]  # 10 ms is the hardcoded max refractory period
-    bTest = bTest[bTest <= 0.01]
-
-    ccg_cumsum = np.cumsum(ccg)
-    sum_res = ccg_cumsum[bTestIdx - 1]  # -1 bc first bin is 0-bin_size
-
-    # Calculate max violations per refractory period size.
-    num_bins_2s = ccg.shape[0]
-    num_bins_1s = int(num_bins_2s / 2)
-    bin_rate = np.mean(ccg[num_bins_1s:num_bins_2s])  # taking 1-2s as a baseline
-    max_contam = (
-        np.array(bTest)
-        / params["ref_pen_bin_width"]
-        * 1000
-        * bin_rate
-        * params["max_viol"]
+    return npx.metrics._sliding_RP_viol(
+        ccg, params["ref_pen_bin_width"], params["max_viol"]
     )
-    # Compute confidence of less than thresh contamination at each refractory period.
-    confs = np.zeros(sum_res.shape[0])
-    for j, cnt in enumerate(sum_res):
-        confs[j] = 1 - poisson.cdf(cnt, max_contam[j])
-
-    return 1 - confs.max(), bTest[confs.argmax()]
 
 
 def accept_all_merges(vals, params) -> None:

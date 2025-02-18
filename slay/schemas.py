@@ -160,12 +160,12 @@ class CorrelogramParams(Schema):
 class RefractoryParams(Schema):
     ref_pen_bin_width = Float(
         required=False,
-        missing=1,
+        missing=0.25,
         description="For refractory period penalty, bin width IN MS of cross correlogram, also affects refractory periods",
     )
     max_viol = Float(
         required=False,
-        missing=0.25,
+        missing=0.1,
         description="For refractory period penalty, maximum acceptable proportion (w.r.t uniform acg) of refractory period collisions",
     )
     ref_pen_coeff = Float(
