@@ -28,7 +28,7 @@ To fully automate your spike sorting pipeline and avoid switching environments b
    ```bash
    *navigate to desired folder*
    git clone https://github.com/saikoukunt/SLAy.git
-   cd npx_utils
+   cd slay
    pip install -e .
    ```
 
