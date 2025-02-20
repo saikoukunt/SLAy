@@ -10,12 +10,20 @@ def main(args: dict = None) -> None:
     args = slay.parse_kilosort_params(args)
     schema = RunParams()
     params = schema.load(args)
+    params["meta_path"] = params['data_filepath'].replace(".bin", ".meta")
+
     vals, mst, xct, rpt, mt, tt, num_merge, oc = slay.run_merge(params)
     if params["auto_accept_merges"]:
         slay.accept_all_merges(vals, params)
     else:
-        pass
-        ### add plotting
+        os.makedirs(os.path.join(params["KS_folder"], "automerge", "merges"), exist_ok=True)
+        data, cl_labels, mean_wf, n_spikes, spike_times, spike_clusters, times_multi = vals
+        slay.plot_merges(
+            data,
+            times_multi,
+            mean_wf,
+            params,
+        )
 
     output: dict[str, Any] = {
         "mean_time": mst,

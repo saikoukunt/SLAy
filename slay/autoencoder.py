@@ -290,6 +290,7 @@ def train_ae(
     post_samples: int = 30,
     do_shft: bool = False,
     model: CN_AE = None,
+    batch_size: int = 128,
 ) -> tuple[CN_AE, SpikeDataset]:
     """
     Creates and trains an autoencoder on the given spike dataset.
@@ -327,7 +328,7 @@ def train_ae(
     train_split = Subset(spk_data, train_indices)
     test_split = Subset(spk_data, test_indices)
 
-    BATCH_SIZE = 128
+    BATCH_SIZE = batch_size
     train_loader = DataLoader(train_split, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_split, batch_size=BATCH_SIZE)
 

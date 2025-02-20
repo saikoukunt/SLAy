@@ -111,8 +111,8 @@ class WaveformParams(Schema):
     )
     max_spikes = Integer(
         required=False,
-        missing=-1,
-        description="Maximum number of spikes per cluster used to calculate mean waveforms and cross projections (-1 uses all spikes)",
+        missing=500,
+        description="Maximum number of spikes per cluster used to calculate mean waveforms and train the autoencoder(-1 uses all spikes)",
     )
     good_lbls = List(
         String,
@@ -137,7 +137,7 @@ class CorrelogramParams(Schema):
     )
     xcorr_bin_width = Float(
         required=False,
-        missing=0.00025,
+        missing=0.0005,
         description="The width in seconds of bins for cross correlogram calculation",
     )
     overlap_tol = Float(
@@ -152,7 +152,7 @@ class CorrelogramParams(Schema):
     )
     xcorr_coeff = Float(
         required=False,
-        missing=0.5,
+        missing=0.25,
         description="Coefficient applied to cross correlation metric during final metric calculation",
     )
 
@@ -160,12 +160,12 @@ class CorrelogramParams(Schema):
 class RefractoryParams(Schema):
     ref_pen_bin_width = Float(
         required=False,
-        missing=0.25,
-        description="For refractory period penalty, bin width IN MS of cross correlogram, also affects refractory periods",
+        missing=1,
+        description="For refractory period penalty, minimum bin width in seconds of cross correlogram, also affects refractory periods",
     )
     max_viol = Float(
         required=False,
-        missing=0.1,
+        missing=0.25,
         description="For refractory period penalty, maximum acceptable proportion (w.r.t uniform acg) of refractory period collisions",
     )
     ref_pen_coeff = Float(

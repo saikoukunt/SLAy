@@ -198,10 +198,13 @@ def calc_ae_sim(
             p1 = peak_chans[i]
             p2 = peak_chans[j]
 
-            # penalize by geometric mean of cross-decay
-            ae_sim[i, j] *= np.sqrt(
+            # penalize by sigmoided version of geometric mean of cross-decay
+            decay_pen_raw = np.sqrt(
                 amps[i, p2] / amps[i, p1] * amps[j, p1] / amps[j, p2]
             )
+            decay_pen = 1/(1 + np.exp(-10*(decay_pen_raw - 0.5)))
+
+            ae_sim[i, j] *= decay_pen
             ae_sim[j, i] = ae_sim[i, j]
 
     return ae_sim, spk_lat_peak, lat_mean, spk_lab
@@ -505,7 +508,7 @@ def accept_all_merges(vals, params) -> None:
         merges = json.load(f)
         merges = {int(k): v for k, v in sorted(merges.items())}
 
-    cl_labels, mean_wf, n_spikes, spike_times, spike_clusters, times_multi = vals
+    data, cl_labels, mean_wf, n_spikes, spike_times, spike_clusters, times_multi = vals
 
     for new_id, old_ids in merges.items():
         mean_wf, cl_labels, spike_times, spike_clusters = accept_merge(

@@ -68,16 +68,20 @@ def xcorr_sig(
         sig (float): The calculated cross-correlation significance metric.
     """
     # calculate low-pass filtered second derivative of ccg
-    sos = butter(4, 1 / 5, output="sos")
-    xgram_filt = sosfiltfilt(sos, xgram)
-    xgram_2d = np.diff(xgram_filt, 2)
-    sos = butter(4, 1 / 10, output="sos")
+    fs = 1 / xcorr_bin_width
+    cutoff_freq = 100
+    nyqist = fs / 2
+    cutoff = cutoff_freq / nyqist
+    peak_width = 0.002 / xcorr_bin_width
+
+    xgram_2d = np.diff(xgram, 2)
+    sos = butter(4, cutoff, output="sos")
     xgram_2d = sosfiltfilt(sos, xgram_2d)
 
     # find negative peaks of second derivative of ccg, these are the edges of dips in ccg
-    peaks = find_peaks_cwt(-xgram_2d, 15, noise_perc=90) + 1
+    peaks = find_peaks_cwt(-xgram_2d, peak_width, noise_perc=90) + 1
     peaks = np.abs(peaks - xgram.shape[0] / 2)
-    peaks = peaks[peaks > 7]
+    peaks = peaks[peaks > 0.5 * peak_width]
     min_peaks = np.sort(peaks)
 
     # start with peaks closest to 0 and move to the next set of peaks if the event count is too low

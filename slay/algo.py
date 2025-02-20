@@ -84,7 +84,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
     # Autoencoder-based similarity calculation.
     if params["sim_type"] == "ae":
-        spk_fld: str = os.path.join(params["KS_folder"], "automerge", "spikes")
         ci = {
             "times_multi": times_multi,
             "counts": counts,
@@ -92,7 +91,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             "mean_wf": mean_wf,
         }
         ext_params = {
-            "spk_fld": spk_fld,
             "pre_samples": params["ae_pre"],
             "post_samples": params["ae_post"],
             "num_chan": params["ae_chan"],
@@ -123,7 +121,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         else:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             net = slay.CN_AE().to(device)
-            net.load_state_dict(torch.load(model_path))
+            net.load_state_dict(torch.load(model_path, weights_only=True))
             net.eval()
             spk_data = slay.SpikeDataset(spk_snips, cl_ids)
 
@@ -137,7 +135,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         sim, _, _, mean_wf, pass_ms = slay.calc_mean_sim(
             clusters, counts, n_clust, cl_labels, mean_wf, params
         )
-        sim[pass_ms == False] = 0
+        sim[~pass_ms] = 0
     pass_ms = sim > params["sim_thresh"]
     tqdm.write(f"Found {pass_ms.sum() / 2} candidate cluster pairs")
     t1 = time.time()
@@ -219,6 +217,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     total_time: str = time.strftime("%H:%M:%S", time.gmtime(t7 - t0))
 
     vals = [
+        data,
         cl_labels,
         mean_wf,
         counts,
