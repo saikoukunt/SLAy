@@ -19,10 +19,7 @@ import slay
 
 
 def calc_mean_sim(
-    clusters: NDArray[np.int_],
-    counts: NDArray[np.int_],
-    n_clust: int,
-    labels: pd.DataFrame,
+    good_ids,
     mean_wf: NDArray[np.float64],
     params: dict[str, Any],
 ) -> tuple[
@@ -55,34 +52,19 @@ def calc_mean_sim(
         pass_ms (NDArray): True if a cluster pair passes the mean similarity
             threshold, false otherwise.
     """
-    cl_good = np.zeros(n_clust, dtype=bool)
-    unique = np.unique(clusters)
-    for i in range(n_clust):
-        if (
-            (i in unique)
-            and (counts[i] > params["sp_num_thresh"])
-            and (labels.loc[i, "label"].item() == "good")
-        ):
-            cl_good[i] = True
 
     # calculate mean similarity
     mean_sim, wf_norms, offset = slay.wf_means_similarity(
-        mean_wf, cl_good, use_jitter=params["jitter"], max_jitter=params["jitter_amt"]
+        mean_wf, good_ids, use_jitter=params["jitter"], max_jitter=params["jitter_amt"]
     )
 
     # check which cluster pairs pass threshold
     pass_ms = np.zeros_like(mean_sim, dtype="bool")
-    for c1 in range(n_clust):
-        for c2 in range(c1 + 1, n_clust):
-            if mean_sim[c1, c2] >= params["sim_thresh"] and (
-                (counts[c1] >= params["sp_num_thresh"])
-                and (counts[c2] >= params["sp_num_thresh"])
-            ):
-                if (labels.loc[c1, "label"].item() == "good") and (
-                    labels.loc[c2, "label"].item() == "good"
-                ):
-                    pass_ms[c1, c2] = True
-                    pass_ms[c2, c1] = True
+    for c1 in good_ids:
+        for c2 in good_ids:
+            if mean_sim[c1, c2] >= params["sim_thresh"] + 0.2:
+                pass_ms[c1, c2] = True
+                pass_ms[c2, c1] = True
 
     return mean_sim, offset, wf_norms, mean_wf, pass_ms
 
@@ -93,7 +75,6 @@ def calc_ae_sim(
     peak_chans: NDArray[np.int_],
     spk_data: slay.SpikeDataset,
     good_ids: NDArray[np.int_],
-    do_shft: bool,
     zDim: int = 15,
     sf: int = 1,
 ) -> tuple[
@@ -139,21 +120,14 @@ def calc_ae_sim(
     loss = 0
     with torch.no_grad():
         for idx, data in enumerate(tqdm(dl, desc="Calculating latent representations")):
-            spks, lab = data[0].to(device), data[1].to(device)
-            if do_shft:
-                spks = spks[:, :, :, 5:-5]
-            targ = spks.clone()
+            spks, lab, idx = data[0].to(device), data[1].to(device), data[2]
 
-            rec = model(spks)
-            loss += loss_fn(targ, rec).item()
+            rec, _ = model(spks)
+            loss += loss_fn(spks, rec).item()
 
-            out = model.encoder(
-                spks if not do_shft else rec
-            )  # does this need to be (net.encoder(net(spks)) for time-shift?
-            start_idx = idx * 128
-            end_idx = start_idx + 128
-            spk_lat[start_idx:end_idx] = out.cpu().detach().numpy()
-            spk_lab[start_idx:end_idx] = lab.cpu().detach().numpy()
+            out = model.encode(spks)
+            spk_lat[idx] = out.cpu().detach().numpy()
+            spk_lab[idx] = lab.cpu().detach().numpy()
 
     tqdm.write(f"\nAverage Loss: {loss/len(dl):.4f}")
 
@@ -202,7 +176,7 @@ def calc_ae_sim(
             decay_pen_raw = np.sqrt(
                 amps[i, p2] / amps[i, p1] * amps[j, p1] / amps[j, p2]
             )
-            decay_pen = 1/(1 + np.exp(-10*(decay_pen_raw - 0.5)))
+            decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
 
             ae_sim[i, j] *= decay_pen
             ae_sim[j, i] = ae_sim[i, j]
@@ -265,7 +239,6 @@ def calc_xcorr_metric(
             if pass_ms[c1, c2]:
                 xcorr_sig[c1, c2] = slay.xcorr_sig(
                     xgrams[c1, c2],
-                    window_size=params["window_size"],
                     xcorr_bin_width=params["xcorr_bin_width"],
                     min_xcorr_rate=params["min_xcorr_rate"],
                 )
@@ -453,7 +426,7 @@ def xcorr_func(
     return npx.x_correlogram(
         c1_times,
         c2_times,
-        params["max_window"],
+        params["window_size"],
         params["xcorr_bin_width"],
         params["overlap_tol"],
     )

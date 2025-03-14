@@ -42,7 +42,6 @@ def bin_spike_trains(
 
 def xcorr_sig(
     xgram: NDArray[np.float64],
-    window_size: float,
     xcorr_bin_width: float,
     min_xcorr_rate: float,
 ) -> float:
@@ -57,7 +56,6 @@ def xcorr_sig(
 
     Args:
         xgram (NDArray): The raw cross-correlogram for the cluster pair.
-        window_size (float): The width in seconds of the default ccg window.
         xcorr_bin_width (float): The width in seconds of the bin size of the
             input ccgs.
         max_window (float): The largest allowed window size during window

@@ -63,24 +63,23 @@ def wf_means_similarity(
     shifts: NDArray[np.int_] = np.zeros((n_clust, n_clust), dtype="int16")
     wf_norms: NDArray[np.float64] = calc_wf_norms(mean_wf)
 
-    for i in range(n_clust):
-        for j in range(n_clust):
-            if cl_good[i] and cl_good[j]:
-                if i != j:
-                    norm: NDArray[np.float64] = max(wf_norms[i], wf_norms[j])
-                    if norm == 0:
-                        continue
+    for i in cl_good:
+        for j in cl_good:
+            if i != j:
+                norm: NDArray[np.float64] = max(wf_norms[i], wf_norms[j])
+                if norm == 0:
+                    continue
 
-                    if use_jitter:
-                        sim: float
-                        off: int
-                        sim, off = find_jitter(mean_wf[i], mean_wf[j], max_jitter)
-                        mean_sim[i, j] = sim / (norm**2)
-                        shifts[i, j] = off
-                    else:
-                        mean_sim[i, j] = np.dot(
-                            mean_wf[i].flatten(), mean_wf[j].flatten()
-                        ) / (norm**2)
+                if use_jitter:
+                    sim: float
+                    off: int
+                    sim, off = find_jitter(mean_wf[i], mean_wf[j], max_jitter)
+                    mean_sim[i, j] = sim / (norm**2)
+                    shifts[i, j] = off
+                else:
+                    mean_sim[i, j] = np.dot(
+                        mean_wf[i].flatten(), mean_wf[j].flatten()
+                    ) / (norm**2)
 
     return mean_sim, wf_norms, shifts
 

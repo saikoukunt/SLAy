@@ -11,7 +11,6 @@ from numpy.typing import NDArray
 from tqdm import tqdm
 import json
 
-import slay
 import npx_utils as npx
 
 matplotlib.use("Agg")
@@ -23,7 +22,7 @@ def plot_merges(
     times_multi: list,
     mean_wf: NDArray[np.float_],
     params: dict[str, Any],
-    nchan: int = 20,
+    nchan: int = 10,
     start: int = 10,
     stop: int = 60,
 ) -> None:

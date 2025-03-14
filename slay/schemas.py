@@ -127,13 +127,8 @@ class CorrelogramParams(Schema):
     # Cross-correlogram parameters
     window_size = Float(
         required=False,
-        missing=0.025,
+        missing=0.1,
         description="The width in seconds of the cross correlogram window.",
-    )
-    max_window = Float(
-        required=False,
-        missing=0.25,
-        description="Maximum window size in seconds when searching for enough spikes to construct a cross correlogram",
     )
     xcorr_bin_width = Float(
         required=False,
@@ -142,12 +137,12 @@ class CorrelogramParams(Schema):
     )
     overlap_tol = Float(
         required=False,
-        missing=10 / 30000,
+        missing=5 / 30000,
         description="Overlap tolerance in seconds. Spikes within the tolerance of the reference spike time will not be counted for cross correlogram calculation",
     )
     min_xcorr_rate = Float(
         required=False,
-        missing=1200,
+        missing=800,
         description="Spike count threshold (per second) for cross correlograms. Cluster pairs whose cross correlogram spike rate is lower than the threshold will have a penalty applied to their cross correlation metric",
     )
     xcorr_coeff = Float(
@@ -160,12 +155,12 @@ class CorrelogramParams(Schema):
 class RefractoryParams(Schema):
     ref_pen_bin_width = Float(
         required=False,
-        missing=1,
+        missing=0.5,
         description="For refractory period penalty, minimum bin width in seconds of cross correlogram, also affects refractory periods",
     )
     max_viol = Float(
         required=False,
-        missing=0.25,
+        missing=0.15,
         description="For refractory period penalty, maximum acceptable proportion (w.r.t uniform acg) of refractory period collisions",
     )
     ref_pen_coeff = Float(
@@ -243,7 +238,7 @@ class SimilarityParams(Schema):
     )
     jitter_amt = Integer(
         required=False,
-        missing=4,
+        missing=2,
         description="For time shift checking, number of samples to search in each direction",
     )
 

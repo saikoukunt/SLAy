@@ -110,8 +110,9 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             net, spk_data = slay.train_ae(
                 spk_snips,
                 cl_ids,
-                do_shft=params["ae_shft"],
+                counts,
                 num_epochs=params["ae_epochs"],
+                max_snips=params["max_spikes"],
             )
             torch.save(
                 net.state_dict(),
@@ -126,15 +127,11 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             spk_data = slay.SpikeDataset(spk_snips, cl_ids)
 
         # Calculate similarity using distances in the autoencoder latent space.
-        sim, _, _, _ = slay.calc_ae_sim(
-            mean_wf, net, peak_chans, spk_data, good_ids, do_shft=params["ae_shft"]
-        )
+        sim, _, _, _ = slay.calc_ae_sim(mean_wf, net, peak_chans, spk_data, good_ids)
         pass_ms = sim > params["sim_thresh"]
     elif params["sim_type"] == "mean":
         # Calculate similarity using inner products between waveforms.
-        sim, _, _, mean_wf, pass_ms = slay.calc_mean_sim(
-            clusters, counts, n_clust, cl_labels, mean_wf, params
-        )
+        sim, _, _, mean_wf, pass_ms = slay.calc_mean_sim(good_ids, mean_wf, params)
         sim[~pass_ms] = 0
     pass_ms = sim > params["sim_thresh"]
     tqdm.write(f"Found {pass_ms.sum() / 2} candidate cluster pairs")

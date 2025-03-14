@@ -1,4 +1,4 @@
-""" 
+"""
 General utilities for ephys data-wrangling.
 
 Assumes that ephys data is stored in the phy output format.
