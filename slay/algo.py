@@ -83,56 +83,52 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     sim = np.ndarray(0)
 
     # Autoencoder-based similarity calculation.
-    if params["sim_type"] == "ae":
-        ci = {
-            "times_multi": times_multi,
-            "counts": counts,
-            "good_ids": good_ids,
-            "mean_wf": mean_wf,
-        }
-        ext_params = {
-            "pre_samples": params["ae_pre"],
-            "post_samples": params["ae_post"],
-            "num_chan": params["ae_chan"],
-            "for_shft": params["ae_shft"],
-        }
-        spk_snips, cl_ids = slay.generate_train_data(
-            data, ci, channel_pos, ext_params, params
+    ci = {
+        "times_multi": times_multi,
+        "counts": counts,
+        "good_ids": good_ids,
+        "mean_wf": mean_wf,
+    }
+    ext_params = {
+        "pre_samples": params["ae_pre"],
+        "post_samples": params["ae_post"],
+        "num_chan": params["ae_chan"],
+        "for_shft": params["ae_shft"],
+    }
+    spk_snips, cl_ids = slay.generate_train_data(
+        data, ci, channel_pos, ext_params, params
+    )
+    # Train the autoencoder if needed.
+    model_path = (
+        params["model_path"]
+        if params["model_path"]
+        else os.path.join(params["KS_folder"], "automerge", "ae.pt")
+    )
+    if not os.path.exists(model_path):
+        tqdm.write("Training autoencoder...")
+        net, spk_data = slay.train_ae(
+            spk_snips,
+            cl_ids,
+            counts,
+            num_epochs=params["ae_epochs"],
+            max_snips=params["max_spikes"],
         )
-        # Train the autoencoder if needed.
-        model_path = (
-            params["model_path"]
-            if params["model_path"]
-            else os.path.join(params["KS_folder"], "automerge", "ae.pt")
+        torch.save(
+            net.state_dict(),
+            model_path,
         )
-        if not os.path.exists(model_path):
-            tqdm.write("Training autoencoder...")
-            net, spk_data = slay.train_ae(
-                spk_snips,
-                cl_ids,
-                counts,
-                num_epochs=params["ae_epochs"],
-                max_snips=params["max_spikes"],
-            )
-            torch.save(
-                net.state_dict(),
-                model_path,
-            )
-            tqdm.write(f"Autoencoder saved in {model_path}")
-        else:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            net = slay.CN_AE().to(device)
-            net.load_state_dict(torch.load(model_path, weights_only=True))
-            net.eval()
-            spk_data = slay.SpikeDataset(spk_snips, cl_ids)
+        tqdm.write(f"Autoencoder saved in {model_path}")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        net = slay.CN_AE().to(device)
+        net.load_state_dict(torch.load(model_path, weights_only=True))
+        net.eval()
+        spk_data = slay.SpikeDataset(spk_snips, cl_ids)
 
-        # Calculate similarity using distances in the autoencoder latent space.
-        sim, _, _, _ = slay.calc_ae_sim(mean_wf, net, peak_chans, spk_data, good_ids)
-        pass_ms = sim > params["sim_thresh"]
-    elif params["sim_type"] == "mean":
-        # Calculate similarity using inner products between waveforms.
-        sim, _, _, mean_wf, pass_ms = slay.calc_mean_sim(good_ids, mean_wf, params)
-        sim[~pass_ms] = 0
+    # Calculate similarity using distances in the autoencoder latent space.
+    sim, _, _, _ = slay.calc_ae_sim(mean_wf, net, peak_chans, spk_data, good_ids)
+    pass_ms = sim > params["sim_thresh"]
+
     pass_ms = sim > params["sim_thresh"]
     tqdm.write(f"Found {pass_ms.sum() / 2} candidate cluster pairs")
     t1 = time.time()

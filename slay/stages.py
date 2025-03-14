@@ -18,57 +18,6 @@ from tqdm import tqdm
 import slay
 
 
-def calc_mean_sim(
-    good_ids,
-    mean_wf: NDArray[np.float64],
-    params: dict[str, Any],
-) -> tuple[
-    NDArray[np.float64],
-    NDArray[np.int_],
-    NDArray[np.float64],
-    NDArray[np.float64],
-    NDArray[np.bool_],
-]:
-    """
-    Calculates inner product similarity using mean waveforms.
-
-    Args:
-        clusters (NDArray): Spike cluster assignments.
-        counts (NDArray): Number of spikes per cluster.
-        n_clust (int): The number of clusters, taken to be the largest cluster id + 1.
-        labels (pd.Dataframe): Cluster quality labels.
-        mean_wf (NDArray): Cluster mean waveforms with shape (# of clusters,
-            # channels, # timepoints).
-        params (dict): General SpECtr params.
-
-    Returns:
-        mean_sim (NDArray): The (maximum) pairwise similarity for each pair of
-            (normalized) waveforms.
-        offset (NDArray): If jitter is enabled, the shift that produces the
-            max inner product for each pair of waveforms.
-        wf_norms (NDArray): Calculated waveform norms.
-        mean_wf (NDArray): Cluster mean waveforms with shape (# of clusters,
-            # channels, # timepoints).
-        pass_ms (NDArray): True if a cluster pair passes the mean similarity
-            threshold, false otherwise.
-    """
-
-    # calculate mean similarity
-    mean_sim, wf_norms, offset = slay.wf_means_similarity(
-        mean_wf, good_ids, use_jitter=params["jitter"], max_jitter=params["jitter_amt"]
-    )
-
-    # check which cluster pairs pass threshold
-    pass_ms = np.zeros_like(mean_sim, dtype="bool")
-    for c1 in good_ids:
-        for c2 in good_ids:
-            if mean_sim[c1, c2] >= params["sim_thresh"] + 0.2:
-                pass_ms[c1, c2] = True
-                pass_ms[c2, c1] = True
-
-    return mean_sim, offset, wf_norms, mean_wf, pass_ms
-
-
 def calc_ae_sim(
     mean_wf: NDArray[np.float64],
     model: nn.Module,
