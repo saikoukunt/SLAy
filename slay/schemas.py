@@ -171,13 +171,6 @@ class RefractoryParams(Schema):
 
 
 class SimilarityParams(Schema):
-    # Similarity calculation parameters
-    sim_type = String(
-        required=False,
-        missing="ae",
-        description='Type of similarity metric to use, must be either "ae" (for autoencoder similarity) or "mean" (for mean similarity)',
-    )
-
     # Similarity: Autoencoder parameters
     spikes_path = InputDir(
         required=False,
@@ -228,18 +221,6 @@ class SimilarityParams(Schema):
         required=False,
         missing=25,
         description="Number of epochs to train autoencoder for",
-    )
-
-    # Similarity: Mean parameters
-    jitter = Boolean(
-        required=False,
-        missing=False,
-        description="True if mean similarity calculations should check for time shifts between waveforms",
-    )
-    jitter_amt = Integer(
-        required=False,
-        missing=2,
-        description="For time shift checking, number of samples to search in each direction",
     )
 
 

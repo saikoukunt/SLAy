@@ -134,11 +134,11 @@ def calc_ae_sim(
 
 
 def calc_xcorr_metric(
-    times_multi: list[NDArray[np.float64]],
+    times_multi: dict[int, NDArray[np.float64]],
     n_clust: int,
     pass_ms: NDArray[np.bool_],
     params: dict[str, Any],
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """
     Calculates the cross-correlogram significance metric between each candidate pair of
     clusters.
@@ -204,7 +204,7 @@ def calc_ref_p(
     pass_ms: NDArray[np.bool_],
     xcorr_sig: NDArray[np.float64],
     params: dict[str, Any],
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+) -> NDArray[np.float64]:
     """
     Calculates the cross-correlogram significance metric between each candidate pair of
     clusters.
