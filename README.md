@@ -10,7 +10,7 @@
 ## Running SLAy
 
 ### Setting default parameters
-[`slay/schemas.py`](./slay/schemas.py) contains the names and descriptions of all parameters, and their default values can be changed there. The default parameters work across a variety of brain regions and animal models, but you can adjust the defaults for your own preferences. Some parameters you may want to change are:
+[`slay/schemas.py`](./slay/schemas.py) contains the names and descriptions of all parameters, and their default values can be changed there (or parameters may be passed in when calling run function). The default parameters work across a variety of brain regions and animal models, but you can adjust the defaults for your own preferences. Some parameters you may want to change are:
 
 - `'auto_accept_merges'` : If True, all the suggested merges will be automatically accepted and the KS files (`spike_clusters.npy`) will be overwritten. If False, the merges will be plotted in the `{ks_dir}/automerge/merges` folder. **Defaults to False**.
 
