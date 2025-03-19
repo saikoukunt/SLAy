@@ -7,7 +7,6 @@ from slay.plot import plot_merges
 from slay.stages import (
     accept_all_merges,
     calc_ae_sim,
-    calc_mean_sim,
     calc_ref_p,
     calc_xcorr_metric,
     merge_clusters,
