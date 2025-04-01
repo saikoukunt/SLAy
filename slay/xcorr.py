@@ -76,6 +76,9 @@ def xcorr_sig(
     sos = butter(4, cutoff, output="sos")
     xgram_2d = sosfiltfilt(sos, xgram_2d)
 
+    if xgram.sum() == 0:
+        return 0
+
     # find negative peaks of second derivative of ccg, these are the edges of dips in ccg
     peaks = find_peaks_cwt(-xgram_2d, peak_width, noise_perc=90) + 1
     peaks = np.abs(peaks - xgram.shape[0] / 2)
