@@ -262,7 +262,9 @@ def train_ae(
     model: CN_AE = None,
     batch_size: int = 128,
     max_snips: int = 500,
-) -> tuple[CN_AE, SpikeDataset]:
+    return_inds=False,
+    verbose=True,
+):
     """
     Creates and trains an autoencoder on the given spike dataset.
 
@@ -294,7 +296,11 @@ def train_ae(
     labels = cl_ids
 
     train_indices, test_indices, _, _ = train_test_split(
-        range(len(spk_data)), labels, stratify=labels, test_size=0.2, random_state=42
+        np.arange(len(spk_data)),
+        labels,
+        stratify=labels,
+        test_size=0.2,
+        random_state=42,
     )
     sample_weights = [
         1 / max(counts[int(label)], max_snips) for label in labels[train_indices]
@@ -344,7 +350,12 @@ def train_ae(
                 running_tloss += tloss.item()
 
         avg_test_loss = running_tloss / len(test_loader)
-        tqdm.write(
-            f"Epoch {epoch + 1:2d}/{num_epochs} | Train MSE: {avg_train_mse:.4f} | Test MSE: {avg_test_loss:.4f}"
-        )
-    return net, spk_data
+        if verbose:
+            tqdm.write(
+                f"Epoch {epoch + 1:2d}/{num_epochs} | Train MSE: {avg_train_mse:.4f} | Test MSE: {avg_test_loss:.4f}"
+            )
+
+    if return_inds:
+        return net, spk_data, test_indices
+    else:
+        return net, spk_data
