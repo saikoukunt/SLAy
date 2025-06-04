@@ -19,7 +19,7 @@ def generate_figure_2():
 
     for root, dirs, files in os.walk(data_dir):
         for dir_name in dirs:
-            if ("ks" in dir_name) and ("orig" not in dir_name):
+            if (dir_name == "phy_output") and ("orig" not in dir_name):
                 ks_dir = os.path.join(root, dir_name)
                 args = {"KS_folder": ks_dir}
                 args = slay.parse_kilosort_params(args)

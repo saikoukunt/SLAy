@@ -8,7 +8,6 @@ import numpy as np
 import scipy
 import seaborn as sns
 from figure_2 import calc_presence_ratio, calc_spatial_mismatch, load_channel_positions
-from scipy import spatial
 
 import slay
 from slay.schemas import RunParams
@@ -25,7 +24,7 @@ def generate_figure_4():
 
     for root, dirs, files in os.walk(data_dir):
         for dir_name in dirs:
-            if ("ks" in dir_name) and ("orig" not in dir_name):
+            if (dir_name == "phy_output") and ("orig" not in dir_name):
                 ks_dir = os.path.join(root, dir_name)
                 args = {"KS_folder": ks_dir}
                 args = slay.parse_kilosort_params(args)
@@ -34,6 +33,7 @@ def generate_figure_4():
                 clusters, cl_labels, _, data, n_clust, times_multi, counts = (
                     slay.load_ks_files(params)
                 )
+                print((cl_labels == "good").sum())
                 n_chan = data.shape[-1]
 
                 presence_ratio_dists[ks_dir] = calc_dist_presence_ratio(
