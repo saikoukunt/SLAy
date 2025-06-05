@@ -132,7 +132,7 @@ def load_ks_files(params):
 
     n_clust = clusters.max() + 1
     times_multi = npx.find_times_multi(
-        times,
+        times / 30000,
         clusters,
         np.arange(n_clust),
         data,

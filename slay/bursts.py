@@ -53,6 +53,10 @@ def find_bursts(
         q (NDArray): The inferred optimal state sequence.
         a (NDArray): The inferred HMM state firing rates.
     """
+    spike_times = np.unique(spike_times)  # remove exact duplicates
+    # if two spikes are within 5/30000 seconds, remove the second one
+    spike_times = spike_times[np.diff(spike_times, prepend=0) > 10 / 30000]
+
     q, a = find_sequence(spike_times, state_ratio, gamma)
     gaps: NDArray[np.float64] = np.diff(spike_times)
 
@@ -112,7 +116,7 @@ def find_sequence(
             spike rate and `state_ratio`.
     """
 
-    spike_times = np.sort(spike_times)
+    # spike_times = np.sort(spike_times)
     gaps: NDArray[np.float64] = np.diff(spike_times)
 
     # calculate base rate and number of HMM states (k)
