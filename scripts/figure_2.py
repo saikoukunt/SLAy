@@ -55,6 +55,7 @@ def generate_figure_2():
         "../results/figures/fig2_presence_ratio_dists.svg", transparent=True, dpi=300
     )
 
+    plt.figure()
     sns.violinplot(data=list(spatial_mismatch_dists.values()), cut=0)
     plt.xlabel("Dataset")
     plt.ylabel("Spatial Mismatch")
