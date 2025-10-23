@@ -9,15 +9,16 @@ import json
 import os
 from typing import Any
 
-import npx_utils as npx
+import cupy as cp
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 from scipy.stats import wasserstein_distance
 from tqdm import tqdm
+from scipy import stats
+from scipy.signal import butter, sosfiltfilt
 
 import slay
-import slay.SGLXMetaToCoords
 
 
 def parse_cmd_line_args() -> dict[str, Any]:
@@ -131,7 +132,7 @@ def load_ks_files(params):
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = npx.find_times_multi(
+    times_multi = slay.find_times_multi(
         times / 30000,
         clusters,
         np.arange(n_clust),
@@ -160,6 +161,239 @@ def spikes_per_cluster(sp_clust: NDArray[np.int_]) -> NDArray[np.int_]:
     counts_array[ids] = counts
 
     return counts_array
+
+
+def find_times_multi(
+    sp_times: NDArray[np.float64],
+    sp_clust: NDArray[np.int_],
+    clust_ids: list[int],
+    data: NDArray[np.int_],
+    pre_samples: int,
+    post_samples: int,
+) -> dict[NDArray[np.float64]]:
+    """
+    Finds all the spike times for each of the specified clusters.
+
+    Args:
+        sp_times (NDArray): Spike times (in any unit of time).
+        sp_clust (NDArray): Spike cluster assignments.
+        clust_ids (NDArray): Clusters for which spike times should be returned.
+        data (NDArray): Ephys data with shape (# of timepoints, # of channels).
+            Should be passed in as an np.memmap for large datasets.
+        pre_samples (int): The number of samples to extract before the peak of the
+            spike. Defaults to 20.
+        post_samples (int): The number of samples to extract after the peak of the
+            spike. Defaults to 62.
+
+    Returns:
+        cl_times (dict): found cluster spike times in samples.
+    """
+    times_multi = {}
+
+    for i in clust_ids:
+        cl_spike_times = sp_times[sp_clust == i]
+        cl_spike_times = cl_spike_times[
+            (cl_spike_times >= pre_samples)
+            & (cl_spike_times < data.shape[0] - post_samples)
+        ]
+        times_multi[i] = cl_spike_times
+
+    return times_multi
+
+
+def extract_spikes(
+    data: NDArray[np.int_],
+    times_multi: list[NDArray[np.float64]],
+    clust_id: int,
+    pre_samples: int,
+    post_samples: int,
+    max_spikes: int,
+) -> NDArray[np.int_]:
+    """
+    Extracts spike waveforms for the specified cluster.
+
+    If the cluster contains more than `max_spikes` spikes, `max_spikes` random
+    spikes are extracted instead.
+
+    Args:
+        data (NDArray): Ephys data with shape (# of timepoints, # of channels).
+            Should be passed in as an np.memmap for large datasets.
+        times_multi (list): Spike times indexed by cluster id.
+        clust_id (list): The cluster to extract spikes from
+        pre_samples (int): The number of samples to extract before the peak of the
+            spike. Defaults to 20.
+        post_samples (int): The number of samples to extract after the peak of the
+            spike. Defaults to 62.
+        max_spikes (int): The maximum number of spikes to extract. If -1, all
+            spikes are extracted. Defaults to -1.
+
+    Returns:
+        spikes (NDArray): Array of extracted spike waveforms with shape
+            (# of spikes, # of channels, # of timepoints).
+    """
+    times = times_multi[clust_id].astype("int64")
+    # spikes cut off by the ends of the recording is handled in times_multi
+    # times = times[(times >= pre_samples) & (times < data.shape[0] - post_samples)]
+
+    # Randomly pick spikes if the cluster has too many
+    if (max_spikes != -1) and (times.shape[0] > max_spikes):
+        np.random.shuffle(times)
+        times = times[:max_spikes]
+
+    # Create an array to store the spikes
+    # Extract spike data around each spike time and avoid for loops for speed
+    start_times = times - pre_samples
+    n_spikes = len(start_times)
+    n_channels = data.shape[1]
+    n_samples = post_samples + pre_samples
+
+    # Create an array to store the spikes
+    spikes = np.empty((n_spikes, n_channels, n_samples), dtype=data.dtype)
+
+    # Use broadcasting to create index arrays for slicing
+    row_indices = np.arange(n_samples).reshape(-1, 1) + start_times
+
+    # Extract the spikes using advanced indexing
+    spikes = data[row_indices, :].transpose(
+        1, 2, 0
+    )  # Shape (n_spikes, n_channels, n_samples)
+
+    return spikes
+
+
+def calc_mean_wf(
+    params: dict[str, Any],
+    n_clusters: int,
+    cluster_ids: list[int],
+    times_multi: dict[NDArray[np.int_]],
+    data: NDArray[np.int_],
+) -> NDArray:
+    """
+    Calculate mean waveform and std waveform for each cluster. Need to have loaded some metrics. If return_spikes is True, also returns the spike waveforms.
+    Use GPU acceleration with cupy. If the mean waveform is the incorrect shape, it will be recalculated.
+
+    Args:
+        params (dict): Parameters for the recording.
+        n_clusters (int): Number of clusters in the recording. Equal to the maximum cluster id + 1.
+        cluster_ids (list): List of cluster ids to calculate waveforms for.
+        times_multi (dict): Dictionary of spike times indexed by cluster id.
+        data (NDArray): Ephys data with shape (n_timepoints, n_channels).
+
+    Returns:
+        NDArray: Mean waveforms for each cluster (uV). Shape (n_clusters, n_channels, pre_samples + post_samples) dtype float32
+        NDArray: Std waveforms for each cluster (uV). Shape (n_clusters, n_channels, pre_samples + post_samples) dtype float32
+        dict[int, NDArray]: Spike waveforms for each cluster (bits). NDArray shape (n_spikes, n_channels, pre_samples + post_samples) dtype int16
+    """
+    mean_wf_path = os.path.join(params["KS_folder"], "mean_waveforms.npy")
+
+    if os.path.exists(mean_wf_path):
+        mean_wf = np.load(mean_wf_path)
+        # recalculate mean_wf if it is not the right shape
+        if mean_wf.shape[0] == n_clusters:
+            if np.any(np.isnan(mean_wf)):
+                mean_wf = np.nan_to_num(mean_wf, nan=0)
+                # save the fixed mean waveform
+                np.save(mean_wf_path, mean_wf)
+
+            return mean_wf
+
+    mean_wf = cp.zeros(
+        (
+            n_clusters,
+            params["n_chan"],
+            params["pre_samples"] + params["post_samples"],
+        )
+    )
+    for i in tqdm(cluster_ids, desc="Calculating mean waveforms"):
+        spikes = extract_spikes(
+            data,
+            times_multi,
+            i,
+            params["pre_samples"],
+            params["post_samples"],
+            params["max_spikes"],
+        )
+        if len(spikes) > 0:  # edge case
+            spikes_cp = cp.array(spikes, dtype=cp.float32)
+            mean_wf[i, :, :] = cp.mean(spikes_cp, axis=0)
+
+    # Convert back to numpy arrays for compatibility
+    mean_wf = cp.asnumpy(mean_wf)
+
+    return mean_wf
+
+
+def calc_sliding_RP_viol(
+    times_multi: dict[NDArray[np.float64]],
+    clust_ids: NDArray[np.int_],
+    bin_size=1,
+    acceptThresh: float = 0.15,
+    window_size: float = 2,
+    overlap_tol: int = 5,
+):
+    RP_viol = {}
+
+    for i in tqdm(clust_ids, desc="Calculating RP viol confs"):
+        times = times_multi[i] / 30000  # convert times to seconds
+
+        if times.shape[0] <= 1:
+            RP_viol[i] = 0
+        else:
+            acg = slay.auto_correlogram(
+                times, window_size, bin_size / 1000, overlap_tol / 30000
+            )
+            RP_viol[i] = _sliding_RP_viol(
+                acg,
+                bin_size,
+                acceptThresh,
+            )
+
+    return RP_viol
+
+
+def _sliding_RP_viol(
+    correlogram,
+    bin_size: float = 1,
+    acceptThresh: float = 0.15,
+) -> float:
+    """
+    Calculate the sliding refractory period violation confidence for a cluster.
+    Args:
+        correlogram (NDArray): The auto-correlogram of the cluster.
+        bin_size (float, optional): The size of each bin in ms. Defaults to 0.25.
+        acceptThresh (float, optional): The threshold for accepting refractory period violations. Defaults to 0.1.
+    Returns:
+        float: The refractory period violation confidence for the cluster.
+    """
+    # create various refractory periods sizes to test (between 0 and 20x bin size)
+    b = np.arange(0, 21 * bin_size, bin_size) / 1000
+    bTestIdx = np.array([1, 2, 4, 6, 8, 12, 16, 20], dtype="int8")
+    bTest = [b[i] for i in bTestIdx]
+
+    # calculate and avg halves of acg to ensure symmetry
+    # keep only second half of acg, refractory period violations are compared from the center of acg
+    half_len = int(correlogram.shape[0] / 2)
+    correlogram = (correlogram[half_len:] + correlogram[:half_len][::-1]) / 2
+
+    acg_cumsum = np.cumsum(correlogram)
+    sum_res = acg_cumsum[bTestIdx - 1]  # -1 bc 0th bin corresponds to 0-bin_size ms
+
+    # low-pass filter acg and use max as baseline event rate
+    order = 4  # Hz
+    cutoff_freq = 250  # Hz
+    fs = 1 / bin_size * 1000
+    nyqist = fs / 2
+    cutoff = cutoff_freq / nyqist
+    sos = butter(order, cutoff, btype="low", output="sos")
+    smoothed_acg = sosfiltfilt(sos, correlogram)
+
+    bin_rate_max = np.max(smoothed_acg)
+    max_conts_max = np.array(bTest) / bin_size * 1000 * (bin_rate_max * acceptThresh)
+    # compute confidence of less than acceptThresh contamination at each refractory period
+    confs = 1 - stats.poisson.cdf(sum_res, max_conts_max)
+    rp_viol = 1 - confs.max()
+
+    return rp_viol
 
 
 ### @internal

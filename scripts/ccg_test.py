@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 
 from scipy.signal import sosfiltfilt, butter, find_peaks_cwt
 from scipy.stats import wasserstein_distance
-import npx_utils as npx
 
 if __name__ == "__main__":
     ks_dir = r"D:\SLAy_data\mouse_hippocampus\catgt_ANM480363_20210527_pfc320_hpc180_g0\ANM480363_20210527_pfc320_hpc180_g0_imec1\imec1_ks2"
@@ -19,7 +18,7 @@ if __name__ == "__main__":
             print(i)
             cl_times = times_multi[i] / params["sample_rate"]
 
-            acg = npx.auto_correlogram(
+            acg = slay.auto_correlogram(
                 cl_times,
                 0.1,
                 params["xcorr_bin_width"],

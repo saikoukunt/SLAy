@@ -3,12 +3,8 @@ from typing import Any, Callable
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from numpy.typing import NDArray
-from scipy.sparse import lil_array
-from scipy.sparse.csgraph import dijkstra
 from sklearn.model_selection import train_test_split
-from sklearn.neighbors import NearestNeighbors
 from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 from tqdm import tqdm
 
@@ -120,18 +116,18 @@ class SpikeDataset(Dataset):
         self,
         spikes: torch.Tensor,
         labels: NDArray[np.int_],
-        transform: Callable = None,
-        target_transform: Callable = None,
+        transform=None,
+        target_transform=None,
     ) -> None:
         self.spikes: torch.Tensor = spikes
         self.labels: NDArray[np.int_] = labels
-        self.transform: Callable = transform
-        self.target_transform: Callable = target_transform
+        self.transform = transform
+        self.target_transform = target_transform
 
     def __len__(self) -> int:
         return self.spikes.shape[0]
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int, int]:
         spk: torch.Tensor = self.spikes[idx]
         label: int = self.labels[idx]
         if self.transform:
@@ -175,59 +171,57 @@ class CN_AE(nn.Module):
         self.qrt_filt = n_filt // 4
         self.featureDim = (n_filt * num_chan // 8) * (num_samp // 8)
 
-        # encoder
         self.encoder_conv = nn.Sequential()
+
         self.encoder_conv.append(
-            nn.Conv2d(imgChannels, self.qrt_filt, kernel_size=4, padding=1, stride=2)
+            nn.Conv2d(imgChannels, self.qrt_filt, kernel_size=3, padding="same")
         )
+        self.encoder_conv.append(nn.BatchNorm2d(self.qrt_filt))
         self.encoder_conv.append(nn.ReLU())
+        self.encoder_conv.append(nn.MaxPool2d(kernel_size=2))
+
         self.encoder_conv.append(
-            nn.Conv2d(self.qrt_filt, self.half_filt, kernel_size=4, padding=1, stride=2)
+            nn.Conv2d(self.qrt_filt, self.half_filt, kernel_size=3, padding="same")
         )
+        self.encoder_conv.append(nn.BatchNorm2d(self.half_filt))
         self.encoder_conv.append(nn.ReLU())
+        self.encoder_conv.append(nn.MaxPool2d(kernel_size=2))
+
         self.encoder_conv.append(
-            nn.Conv2d(self.half_filt, n_filt, kernel_size=4, padding=1, stride=2)
+            nn.Conv2d(self.half_filt, n_filt, kernel_size=3, padding="same")
         )
+        self.encoder_conv.append(nn.BatchNorm2d(n_filt))
+        self.encoder_conv.append(nn.ReLU())
+        self.encoder_conv.append(nn.MaxPool2d(kernel_size=2))
 
         self.encoder_fc = nn.Sequential()
         self.encoder_fc.append(nn.Linear(self.featureDim, zDim))
         self.encoder_fc.append(nn.ReLU())
 
-        # decoder
         self.decoder_fc = nn.Sequential()
-        self.decoder_fc.append(nn.Linear(zDim, self.featureDim // 2))
-        self.decoder_fc.append(nn.ReLU())
-        self.decoder_fc.append(nn.Linear(self.featureDim // 2, self.featureDim))
+        self.decoder_fc.append(nn.Linear(zDim, self.featureDim))
 
         self.decoder_conv = nn.Sequential()
-        self.decoder_conv.append(
-            nn.ConvTranspose2d(
-                n_filt,
-                self.half_filt,
-                kernel_size=4,
-                padding=1,
-                stride=2,
-            )
-        )
+        self.decoder_conv.append(nn.BatchNorm2d(n_filt))
         self.decoder_conv.append(nn.ReLU())
+
+        self.decoder_conv.append(nn.Upsample(size=(num_chan // 4, num_samp // 4)))
         self.decoder_conv.append(
-            nn.ConvTranspose2d(
-                self.half_filt,
-                self.qrt_filt,
-                kernel_size=4,
-                padding=1,
-                stride=2,
-            )
+            nn.ConvTranspose2d(n_filt, self.half_filt, kernel_size=3, padding=1)
         )
+        self.decoder_conv.append(nn.BatchNorm2d(self.half_filt))
         self.decoder_conv.append(nn.ReLU())
+
+        self.decoder_conv.append(nn.Upsample(size=(num_chan // 2, num_samp // 2)))
         self.decoder_conv.append(
-            nn.ConvTranspose2d(
-                self.qrt_filt,
-                imgChannels,
-                kernel_size=4,
-                padding=1,
-                stride=2,
-            )
+            nn.ConvTranspose2d(self.half_filt, self.qrt_filt, kernel_size=3, padding=1)
+        )
+        self.decoder_conv.append(nn.BatchNorm2d(self.qrt_filt))
+        self.decoder_conv.append(nn.ReLU())
+
+        self.decoder_conv.append(nn.Upsample(size=(num_chan, num_samp)))
+        self.decoder_conv.append(
+            nn.ConvTranspose2d(self.qrt_filt, imgChannels, kernel_size=3, padding=1)
         )
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
@@ -238,13 +232,13 @@ class CN_AE(nn.Module):
         return x
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        x: torch.Tensor = self.decoder_fc(z)
-        x = x.view(-1, self.n_filt, int(self.num_chan / 8), int(self.num_samp / 8))
+        x = self.decoder_fc(z)
+        x = x.view(-1, self.n_filt, self.num_chan // 8, self.num_samp // 8)
         x = self.decoder_conv(x)
 
         return x
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         z: torch.Tensor = self.encode(x)
         out: torch.Tensor = self.decode(z)
 
@@ -259,7 +253,7 @@ def train_ae(
     num_epochs: int = 25,
     zDim: int = 15,
     lr: float = 1e-3,
-    model: CN_AE = None,
+    model=None,
     batch_size: int = 128,
     max_snips: int = 500,
     return_inds=False,
@@ -291,7 +285,7 @@ def train_ae(
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Initialize the dataset and dataloaders
+    # Construct cluster-balanced dataloaders
     spk_data = SpikeDataset(spikes, cl_ids)
     labels = cl_ids
 
@@ -302,20 +296,32 @@ def train_ae(
         test_size=0.2,
         random_state=42,
     )
-    sample_weights = [
-        1 / max(counts[int(label)], max_snips) for label in labels[train_indices]
-    ]
+    train_labels, train_counts = np.unique(labels[train_indices], return_counts=True)
+    test_labels, test_counts = np.unique(labels[test_indices], return_counts=True)
+
+    label_to_train_count = dict(zip(train_labels, train_counts))
+    label_to_test_count = dict(zip(test_labels, test_counts))
+
+    train_weights = [1 / label_to_train_count[label] for label in labels[train_indices]]
+    test_weights = [1 / label_to_test_count[label] for label in labels[test_indices]]
     train_split = Subset(spk_data, train_indices)
     test_split = Subset(spk_data, test_indices)
     sampler = WeightedRandomSampler(
-        weights=sample_weights, num_samples=len(train_split), replacement=True
+        weights=train_weights, num_samples=len(train_split), replacement=True
+    )
+    test_sampler = WeightedRandomSampler(
+        weights=test_weights, num_samples=len(test_split), replacement=True
     )
 
     BATCH_SIZE = batch_size
     train_loader = DataLoader(train_split, batch_size=BATCH_SIZE, sampler=sampler)
-    test_loader = DataLoader(test_split, batch_size=BATCH_SIZE)
+    test_loader = DataLoader(test_split, batch_size=BATCH_SIZE, sampler=test_sampler)
 
-    net = model if model else CN_AE(zDim=zDim, n_filt=n_filt).to(device)
+    net = (
+        model
+        if model
+        else CN_AE(zDim=zDim, n_filt=n_filt, num_samp=spikes.shape[-1]).to(device)
+    )
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
     # TRAIN/TEST LOOP
@@ -324,7 +330,7 @@ def train_ae(
         running_mse = 0
 
         # TRAINING ITERATION
-        for spks, _, idx in tqdm(train_loader, desc="Training", leave=False):
+        for spks, _, _ in tqdm(train_loader, desc="Training", leave=False):
             spks = spks.to(device)
 
             out, z_batch = net(spks)

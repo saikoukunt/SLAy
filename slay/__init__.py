@@ -18,5 +18,9 @@ from slay.utils import (
     parse_cmd_line_args,
     parse_kilosort_params,
     spikes_per_cluster,
+    find_times_multi,
+    calc_mean_wf,
+    extract_spikes,
+    _sliding_RP_viol,
 )
-from slay.xcorr import bin_spike_trains, xcorr_sig
+from slay.xcorr import bin_spike_trains, xcorr_sig, x_correlogram, auto_correlogram

@@ -155,13 +155,13 @@ class CorrelogramParams(Schema):
 class RefractoryParams(Schema):
     ref_pen_bin_width = Float(
         required=False,
-        missing=0.5,
-        description="For refractory period penalty, minimum bin width in seconds of cross correlogram, also affects refractory periods",
+        missing=1,
+        description="For refractory period penalty, minimum bin width in milliseconds of cross correlogram",
     )
     max_viol = Float(
         required=False,
         missing=0.15,
-        description="For refractory period penalty, maximum acceptable proportion (w.r.t uniform acg) of refractory period collisions",
+        description="For refractory period penalty, maximum acceptable proportion (w.r.t baseline ccg) of refractory period collisions",
     )
     ref_pen_coeff = Float(
         required=False,
@@ -261,6 +261,9 @@ class RunParams(
         required=False,
         missing=False,
         description="True if merges should be accepted",
+    )
+    plot_merges = Boolean(
+        required=False, missing=True, description="Whether or not to plot merges"
     )
 
 

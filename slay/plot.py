@@ -1,3 +1,4 @@
+import json
 import math
 import os
 from typing import Any
@@ -9,9 +10,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 from numpy.typing import NDArray
 from tqdm import tqdm
-import json
 
-import npx_utils as npx
+import slay
 
 matplotlib.use("Agg")
 
@@ -47,7 +47,7 @@ def plot_merges(
         merge.sort()
         spikes = {}
         for id in merge:
-            spikes[id] = npx.extract_spikes(
+            spikes[id] = slay.extract_spikes(
                 data,
                 times_multi,
                 id,
@@ -109,6 +109,13 @@ def plot_wfs(
     ch_stop = min(int(peak + nchan / 2), mean_wf.shape[1] - 1)
     lines = []
 
+    ymin = np.min(mean_wf[clust, ch_start:ch_stop, start:stop]) - 0.4 * np.abs(
+        np.min(mean_wf[clust, ch_start:ch_stop, start:stop])
+    )
+    ymax = np.max(mean_wf[clust, ch_start:ch_stop, start:stop]) + 0.4 * np.abs(
+        np.max(mean_wf[clust, ch_start:ch_stop, start:stop])
+    )
+
     for i in range(ch_start, ch_stop):
         ind = i - ch_start
         or_ind = ind * len(clust) + 1
@@ -143,6 +150,7 @@ def plot_wfs(
                 right=False,
                 labelleft=False,
             )
+            ax.set_ylim(ymin, ymax)
 
     for ax, row in zip(axes[:, 0], range(ch_start, ch_stop, 2)):
         ax.set_ylabel(row, rotation=90, size="large")
@@ -177,7 +185,7 @@ def plot_corr(
 
     # auto correlograms
     for i in range(n_clust):
-        acg = npx.auto_correlogram(
+        acg = slay.auto_correlogram(
             times_multi[clust[i]] / 30000,
             window_size,
             bin_size / 1000,
@@ -203,7 +211,7 @@ def plot_corr(
 
     # cross correlograms
     for i, j in cross_pairs:
-        ccg = npx.x_correlogram(
+        ccg = slay.x_correlogram(
             times_multi[clust[i]] / 30000,
             times_multi[clust[j]] / 30000,
             window_size,

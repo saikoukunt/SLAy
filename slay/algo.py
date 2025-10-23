@@ -3,7 +3,6 @@ import os
 import time
 from typing import Any
 
-import npx_utils as npx
 import numpy as np
 import pandas as pd
 import torch
@@ -49,7 +48,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = npx.find_times_multi(
+    times_multi = slay.find_times_multi(
         times,
         clusters,
         np.arange(n_clust),
@@ -67,7 +66,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
 
-    mean_wf = npx.calc_mean_wf(
+    mean_wf = slay.calc_mean_wf(
         params,
         n_clust,
         good_ids,
@@ -142,7 +141,9 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     xcorr_time = time.strftime("%H:%M:%S", time.gmtime(t4 - t1))
     # Calculate a refractor period penalty.
     tqdm.write("Calculating refractory period penalty...")
-    ref_pen = slay.calc_ref_p(times_multi, n_clust, pass_ms, xcorr_sig, params)
+    ref_pen, ref_base, ref_obs = slay.calc_ref_p(
+        times_multi, n_clust, pass_ms, xcorr_sig, params
+    )
     t5 = time.time()
     ref_pen_time = time.strftime("%H:%M:%S", time.gmtime(t5 - t4))
 
@@ -166,6 +167,8 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     candidate_sim = sim[c1_ids, c2_ids]
     candidate_xcorr_sig = xcorr_sig[c1_ids, c2_ids]
     candidate_ref_pen = ref_pen[c1_ids, c2_ids]
+    candidate_ref_base = ref_base[c1_ids, c2_ids]
+    candidate_ref_obs = ref_obs[c1_ids, c2_ids]
     candidate_final_metric = final_metric[c1_ids, c2_ids]
 
     candidate_metrics = pd.DataFrame(
@@ -175,6 +178,8 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             "Similarity": candidate_sim,
             "Cross-correlation Significance": candidate_xcorr_sig,
             "Refractory Period Penalty": candidate_ref_pen,
+            "Refractory Period Base": candidate_ref_base,
+            "Refractory Period Observed": candidate_ref_obs,
             "Final Metric": candidate_final_metric,
         }
     )
