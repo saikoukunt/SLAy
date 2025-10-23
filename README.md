@@ -4,6 +4,7 @@
   - [Option 1: Run from a python script (recommended)](#option-1-run-from-a-python-script-recommended)
   - [Option 2: Run from the command line](#option-2-run-from-the-command-line)
 - [Installation Instructions](#installation-instructions)
+- [Citing](#citing)
 
 
 
@@ -19,7 +20,6 @@
 - `'max_viol'`: Acceptable cross-correlogram (CCG) refractory period violations as a proportion of baseline CCG event rate. **Defaults to 0.15.**
 
 - `'xcorr_coeff'`: Coefficient applied to cross-correlation metric for final metric calculation. Decrease this if you want merging to rely more on waveform similarity and less on CCG shape. **Defaults to 0.25.**
-
 
 - `'ref_pen_coeff'`: Coefficient applied to refractory period violation penalty for final metric calculation. Decrease this if you want merging to be more lenient on cluster pairs with refractory period violations. **Defaults to 1.**
 
@@ -65,7 +65,7 @@ python slay/run.py --KS_folder path/to/ks/folder --max_spikes 500
 ```
 
 ## Installation Instructions
-To fully automate your spike sorting pipeline and avoid switching environments between spike sorting and postprocessing, we recommend using SLAy with the CILANtro pipeline (installation instructions [here](https://github.com/NP-HarrisLab/CILANtro)). If you want to run SLAy as a standalone tool, use the installation instructions below.
+If you want to run SLAy as a standalone tool, use the installation instructions below.
 
 1. Create a new conda environment
    ```bash
@@ -92,6 +92,12 @@ To fully automate your spike sorting pipeline and avoid switching environments b
    cd slay
    pip install -e .
    ```
+
+## Citing
+If you use SLAy in your own work, please cite our paper!
+
+> S. Koukuntla, T. Deweese, A. Cheng, R. Mildren, A. Lawrence, A. Graves, K.E. Cullen, J. Colonell, T.D. Harris, and A.S. Charles. SLAy-ing errors in high-density electrophysiology spike sorting. *bioRxiv*, doi: 10.1101/2025.06.20.660590., 2025 [https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1](https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1).
+
 
 
 
