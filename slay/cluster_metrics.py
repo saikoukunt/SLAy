@@ -1,5 +1,5 @@
 """
-Functions and helpers to calculate normalized inner products between waveforms. 
+Functions and helpers to calculate normalized inner products between waveforms.
 
 These functions are not used in the merge finder unless the option to use mean
 similarity is selected (autoencoder-based similarity is the default).
@@ -31,7 +31,7 @@ def calc_wf_norms(wfs: NDArray[np.float64]) -> NDArray[np.float64]:
 
 def wf_means_similarity(
     mean_wf: NDArray[np.float64],
-    cl_good: NDArray[np.bool_],
+    cl_good: NDArray[np.int32],
     use_jitter,
     max_jitter,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.int_]]:

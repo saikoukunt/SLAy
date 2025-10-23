@@ -3,9 +3,7 @@ import math
 import multiprocessing as mp
 import os
 import time
-from calendar import c
 
-import npx_utils as npx
 import numpy as np
 import torch
 from scipy.signal import butter, find_peaks_cwt, sosfiltfilt
@@ -154,7 +152,6 @@ def calc_xgrams(
     xgram_overlap, shfl_overlap: float
         The number of overlapping spikes for the respective correlograms.
     """
-    import npx_utils as npx
 
     import slay
 
@@ -164,18 +161,17 @@ def calc_xgrams(
     # init
     n_bins = math.ceil(window_size / xcorr_bin_width)
     shfl_xgram = np.zeros(n_bins)
-    shfl_overlap = 0
 
     # do shuffled iterations
     for i in range(n_iter):
         c1_shfl, c2_shfl = shuffle_spike_trains(c1_counts, c2_counts, shuffle_bin_width)
 
-        shfl = npx.x_correlogram(
+        shfl = slay.x_correlogram(
             c1_shfl, c2_shfl, window_size, xcorr_bin_width, overlap_tol=overlap_tol
         )
         shfl_xgram += shfl / n_iter
 
-    xgram = npx.x_correlogram(
+    xgram = slay.x_correlogram(
         c1_times, c2_times, window_size, xcorr_bin_width, overlap_tol=overlap_tol
     )
 
@@ -202,7 +198,6 @@ def xcorr_func(
         ccg (NDArray): The computed cross-correlogram.
 
     """
-    import npx_utils as npx
 
     # extract spike times
     c1_times = times_multi[c1] / params["sample_rate"]
@@ -362,7 +357,7 @@ def run_ae_sim(data, params, counts, cl_labels, times_multi, n_clust, channel_po
     good_ids = np.argwhere(
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
-    mean_wf = npx.calc_mean_wf(
+    mean_wf = slay.calc_mean_wf(
         params,
         n_clust,
         good_ids,

@@ -78,7 +78,7 @@ def calc_ae_sim(
             spk_lat[idx] = out.cpu().detach().numpy()
             spk_lab[idx] = lab.cpu().detach().numpy()
 
-    tqdm.write(f"\nAverage Loss: {loss/len(dl):.4f}")
+    tqdm.write(f"\nAverage Loss: {loss / len(dl):.4f}")
 
     # construct dataframes with peak channel
     ae_df = pd.DataFrame({"cluster_id": spk_lab})
@@ -95,15 +95,24 @@ def calc_ae_sim(
     # calculate cluster centroids
     lat_mean = np.zeros((mean_wf.shape[0], zDim + 1))
     for cluster_id, group_df in lat_df.groupby("cluster_id"):
-        lat_mean[int(cluster_id), :] = group_df.iloc[:, group_df.columns != "cluster_id"].mean(axis=0)  # type: ignore
+        lat_mean[int(cluster_id), :] = group_df.iloc[
+            :, group_df.columns != "cluster_id"
+        ].mean(axis=0)  # type: ignore
 
     # calculate nearest neighbors, pairwise distances for cluster centroids
     neigh = NearestNeighbors(n_neighbors=5, metric="euclidean").fit(lat_mean[:, :zDim])
     dists, _ = neigh.kneighbors(lat_mean[:, :zDim], return_distance=True)
     ae_dist = dist.squareform(dist.pdist(lat_mean[:, :zDim], "euclidean"))
 
-    # similarity threshold for further analysis -- mean + std of distance to 1st NN
-    ref_dist = dists[dists[:, 1] != 0, 1].mean() + dists[dists[:, 1] != 0, 1].std()
+    # similarity threshold for further analysis -- calibrated to 0.6 mean wf similarity
+    mean_sim = slay.wf_means_similarity(
+        mean_wf=mean_wf,
+        cl_good=good_ids,
+        use_jitter=False,
+        max_jitter=0,
+    )[0]
+    ref_inds = np.argsort(np.abs(mean_sim.flatten() - 0.6))[-10:]
+    ref_dist = np.mean(ae_dist.flatten()[ref_inds])
 
     # calculate similarity -- ref_dist is scaled to 0.6 similarity
     ae_sim = np.exp(-0.5 * ae_dist / ref_dist)
@@ -241,15 +250,23 @@ def calc_ref_p(
 
     # convert output to numpy arrays
     ref_pen = np.zeros_like(pass_ms, dtype="float64")
+    ref_base = np.zeros_like(pass_ms, dtype="float64")
+    ref_obs = np.zeros_like(pass_ms, dtype="float64")
 
     for i in range(len(res)):
         c1 = args[i][0]
         c2 = args[i][1]
 
-        ref_pen[c1, c2] = res[i]
-        ref_pen[c2, c1] = res[i]
+        ref_pen[c1, c2] = res[i][0]
+        ref_pen[c2, c1] = res[i][0]
 
-    return ref_pen
+        ref_base[c1, c2] = res[i][1]
+        ref_base[c2, c1] = res[i][1]
+
+        ref_obs[c1, c2] = res[i][2]
+        ref_obs[c2, c1] = res[i][2]
+
+    return ref_pen, ref_base, ref_obs
 
 
 def merge_clusters(
@@ -366,13 +383,12 @@ def xcorr_func(
         ccg (NDArray): The computed cross-correlogram.
 
     """
-    import npx_utils as npx
 
     # extract spike times
     c1_times = times_multi[c1] / params["sample_rate"]
     c2_times = times_multi[c2] / params["sample_rate"]
     # compute xgrams
-    return npx.x_correlogram(
+    return slay.x_correlogram(
         c1_times,
         c2_times,
         params["window_size"],
@@ -402,14 +418,13 @@ def ref_p_func(
         ref_per (float): The inferred refractory period.
 
     """
-    import npx_utils as npx
 
     # Extract spike times.
     c1_times = times_multi[c1] / params["sample_rate"]
     c2_times = times_multi[c2] / params["sample_rate"]
 
     # Calculate cross-correlogram.
-    ccg = npx.x_correlogram(
+    ccg = slay.x_correlogram(
         c1_times,
         c2_times,
         window_size=2,
@@ -417,9 +432,7 @@ def ref_p_func(
         overlap_tol=params["overlap_tol"],
     )
 
-    return npx.metrics._sliding_RP_viol(
-        ccg, params["ref_pen_bin_width"], params["max_viol"]
-    )
+    return slay._sliding_RP_viol(ccg, params["ref_pen_bin_width"], params["max_viol"])
 
 
 def accept_all_merges(vals, params) -> None:
@@ -431,6 +444,16 @@ def accept_all_merges(vals, params) -> None:
         merges = {int(k): v for k, v in sorted(merges.items())}
 
     data, cl_labels, mean_wf, n_spikes, spike_times, spike_clusters, times_multi = vals
+
+    # save backups of spike_times and spike_clusters
+    np.save(
+        os.path.join(params["KS_folder"], "spike_times_orig.npy"),
+        spike_times,
+    )
+    np.save(
+        os.path.join(params["KS_folder"], "spike_clusters_orig.npy"),
+        spike_clusters,
+    )
 
     for new_id, old_ids in merges.items():
         mean_wf, cl_labels, spike_times, spike_clusters = accept_merge(
