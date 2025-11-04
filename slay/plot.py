@@ -18,9 +18,9 @@ matplotlib.use("Agg")
 
 ### PLOTTING CODE
 def plot_merges(
-    data: NDArray[np.float_],
+    data: NDArray[np.float64],
     times_multi: list,
-    mean_wf: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
     params: dict[str, Any],
     nchan: int = 10,
     start: int = 10,
@@ -77,7 +77,7 @@ def plot_merges(
 
 def plot_wfs(
     clust: list[int],
-    mean_wf: NDArray[np.float_],
+    mean_wf: NDArray[np.float64],
     spikes: NDArray,
     nchan: int = 10,
     start: int = 10,
@@ -164,7 +164,7 @@ def plot_wfs(
 
 def plot_corr(
     clust: list[int],
-    times_multi: list[NDArray[np.float_]],
+    times_multi: list[NDArray[np.float64]],
     params: dict[str, Any],
 ) -> Figure:
     """

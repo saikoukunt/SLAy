@@ -48,7 +48,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = slay.find_times_multi(
+    times_multi = slay.utils.find_times_multi(
         times,
         clusters,
         np.arange(n_clust),

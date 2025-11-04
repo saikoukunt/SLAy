@@ -64,11 +64,14 @@ def parse_cmd_line_args() -> dict[str, Any]:
 def parse_kilosort_params(args: dict) -> dict[str, Any]:
     # Process KS params.py file
     ksparam_path = os.path.join(args["KS_folder"], "params.py")
+    print(ksparam_path)
     ksparams = {}
     with open(ksparam_path, "r") as f:
         for line in f:
             elem = line.split(sep="=")
             ksparams[elem[0].strip()] = eval(elem[1].strip())
+    ksparams['dat_path'] = ksparams['dat_path'][0]
+    # print(ksparams['dat_path'])
     ksparams["data_filepath"] = os.path.join(
         args["KS_folder"], ksparams.pop("dat_path")
     )

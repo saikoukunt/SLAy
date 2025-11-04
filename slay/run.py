@@ -7,7 +7,8 @@ from slay.schemas import OutputParams, RunParams
 
 
 def main(args: dict = None) -> None:
-    args = slay.parse_kilosort_params(args)
+    # import ipdb; ipdb.set_trace()
+    args = slay.utils.parse_kilosort_params(args)
     schema = RunParams()
     params = schema.load(args)
     params["meta_path"] = params["data_filepath"].replace(".bin", ".meta")
@@ -55,5 +56,5 @@ def main(args: dict = None) -> None:
 
 
 if __name__ == "__main__":
-    args = slay.parse_cmd_line_args()
+    args = slay.utils.parse_cmd_line_args()
     main(args)
