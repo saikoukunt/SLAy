@@ -1,0 +1,37 @@
+[project]
+name = "slay"
+version = "0.1.0"
+authors = [
+    { name = "Sai Koukuntla", email = "sai.koukunt@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "argparse>=1.4.0",
+    "cupy-cuda12x>=13.6.0",
+    "jupyterlab>=4.4.10",
+    "marshmallow>=4.1.0",
+    "matplotlib>=3.10.7",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.15.3",
+    "torch>=2.9.0",
+    "tqdm>=4.67.1",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
