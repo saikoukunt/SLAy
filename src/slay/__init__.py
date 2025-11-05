@@ -1,3 +1,4 @@
+from slay.run import run_slay
 from slay.algo import run_merge
 from slay.autoencoder import CN_AE, SpikeDataset, generate_train_data, train_ae
 from slay.bursts import base_algo, find_bursts

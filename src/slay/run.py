@@ -9,7 +9,7 @@ from .stages import accept_all_merges
 from .utils import parse_cmd_line_args, parse_kilosort_params
 
 
-def main(args: dict = None) -> None:
+def run_slay(args: dict = None) -> None:
     args = parse_kilosort_params(args)
     schema = RunParams()
     params = schema.load(args)
@@ -59,4 +59,4 @@ def main(args: dict = None) -> None:
 
 if __name__ == "__main__":
     args = parse_cmd_line_args()
-    main(args)
+    run_slay(args)

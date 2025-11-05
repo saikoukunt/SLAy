@@ -15,7 +15,7 @@ if __name__ == "__main__":
     for root, dirs, files in os.walk(data_dir):
         for dir_name in dirs:
             # if "ks" in dir_name and "orig" not in dir_name:
-            if "ks4_as" in dir_name:
+            if "ks4_test" in dir_name:
                 ks_dir = os.path.join(root, dir_name)
                 print(ks_dir)
-                slay.run.main({"KS_folder": ks_dir, **merge_params})
+                slay.run_slay({"KS_folder": ks_dir, **merge_params})

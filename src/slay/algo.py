@@ -141,9 +141,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     xcorr_time = time.strftime("%H:%M:%S", time.gmtime(t4 - t1))
     # Calculate a refractor period penalty.
     tqdm.write("Calculating refractory period penalty...")
-    ref_pen, ref_base, ref_obs = calc_ref_p(
-        times_multi, n_clust, pass_ms, xcorr_sig, params
-    )
+    ref_pen = calc_ref_p(times_multi, n_clust, pass_ms, xcorr_sig, params)
     t5 = time.time()
     ref_pen_time = time.strftime("%H:%M:%S", time.gmtime(t5 - t4))
 
@@ -167,8 +165,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     candidate_sim = sim[c1_ids, c2_ids]
     candidate_xcorr_sig = xcorr_sig[c1_ids, c2_ids]
     candidate_ref_pen = ref_pen[c1_ids, c2_ids]
-    candidate_ref_base = ref_base[c1_ids, c2_ids]
-    candidate_ref_obs = ref_obs[c1_ids, c2_ids]
     candidate_final_metric = final_metric[c1_ids, c2_ids]
 
     candidate_metrics = pd.DataFrame(
@@ -178,8 +174,6 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
             "Similarity": candidate_sim,
             "Cross-correlation Significance": candidate_xcorr_sig,
             "Refractory Period Penalty": candidate_ref_pen,
-            "Refractory Period Base": candidate_ref_base,
-            "Refractory Period Observed": candidate_ref_obs,
             "Final Metric": candidate_final_metric,
         }
     )

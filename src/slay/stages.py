@@ -253,23 +253,15 @@ def calc_ref_p(
 
     # convert output to numpy arrays
     ref_pen = np.zeros_like(pass_ms, dtype="float64")
-    ref_base = np.zeros_like(pass_ms, dtype="float64")
-    ref_obs = np.zeros_like(pass_ms, dtype="float64")
 
     for i in range(len(res)):
         c1 = args[i][0]
         c2 = args[i][1]
 
-        ref_pen[c1, c2] = res[i][0]
-        ref_pen[c2, c1] = res[i][0]
+        ref_pen[c1, c2] = res[i]
+        ref_pen[c2, c1] = res[i]
 
-        ref_base[c1, c2] = res[i][1]
-        ref_base[c2, c1] = res[i][1]
-
-        ref_obs[c1, c2] = res[i][2]
-        ref_obs[c2, c1] = res[i][2]
-
-    return ref_pen, ref_base, ref_obs
+    return ref_pen
 
 
 def merge_clusters(

@@ -53,7 +53,7 @@ if __name__ == "__main__":
             if "ks25" in dir_name:
                 ks_dir = os.path.join(root, dir_name)
                 print(ks_dir)
-                slay.run.main({"KS_folder": ks_dir, **merge_params})
+                slay.run_slay({"KS_folder": ks_dir, **merge_params})
 ```
 
 ### Option 2: Run from the command line
