@@ -2,19 +2,22 @@ import json
 import os
 from typing import Any
 
-import slay
-from slay.schemas import OutputParams, RunParams
+from .algo import run_merge
+from .plot import plot_merges
+from .schemas import OutputParams, RunParams
+from .stages import accept_all_merges
+from .utils import parse_cmd_line_args, parse_kilosort_params
 
 
 def main(args: dict = None) -> None:
-    args = slay.parse_kilosort_params(args)
+    args = parse_kilosort_params(args)
     schema = RunParams()
     params = schema.load(args)
     params["meta_path"] = params["data_filepath"].replace(".bin", ".meta")
 
-    vals, mst, xct, rpt, mt, tt, num_merge, oc = slay.run_merge(params)
+    vals, mst, xct, rpt, mt, tt, num_merge, oc = run_merge(params)
     if params["auto_accept_merges"]:
-        slay.accept_all_merges(vals, params)
+        accept_all_merges(vals, params)
     else:
         os.makedirs(
             os.path.join(params["KS_folder"], "automerge", "merges"), exist_ok=True
@@ -23,7 +26,7 @@ def main(args: dict = None) -> None:
             vals
         )
         if params["plot_merges"]:
-            slay.plot_merges(
+            plot_merges(
                 data,
                 times_multi,
                 mean_wf,
@@ -55,5 +58,5 @@ def main(args: dict = None) -> None:
 
 
 if __name__ == "__main__":
-    args = slay.parse_cmd_line_args()
+    args = parse_cmd_line_args()
     main(args)

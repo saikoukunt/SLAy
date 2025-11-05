@@ -11,7 +11,8 @@ from matplotlib.figure import Figure
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-import slay
+from .utils import extract_spikes
+from .xcorr import auto_correlogram, x_correlogram
 
 matplotlib.use("Agg")
 
@@ -47,7 +48,7 @@ def plot_merges(
         merge.sort()
         spikes = {}
         for id in merge:
-            spikes[id] = slay.extract_spikes(
+            spikes[id] = extract_spikes(
                 data,
                 times_multi,
                 id,
@@ -185,7 +186,7 @@ def plot_corr(
 
     # auto correlograms
     for i in range(n_clust):
-        acg = slay.auto_correlogram(
+        acg = auto_correlogram(
             times_multi[clust[i]] / 30000,
             window_size,
             bin_size / 1000,
@@ -211,7 +212,7 @@ def plot_corr(
 
     # cross correlograms
     for i, j in cross_pairs:
-        ccg = slay.x_correlogram(
+        ccg = x_correlogram(
             times_multi[clust[i]] / 30000,
             times_multi[clust[j]] / 30000,
             window_size,

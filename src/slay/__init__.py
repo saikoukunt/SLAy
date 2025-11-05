@@ -1,4 +1,3 @@
-import slay.run as run
 from slay.algo import run_merge
 from slay.autoencoder import CN_AE, SpikeDataset, generate_train_data, train_ae
 from slay.bursts import base_algo, find_bursts
@@ -23,4 +22,5 @@ from slay.utils import (
     extract_spikes,
     _sliding_RP_viol,
 )
-from slay.xcorr import bin_spike_trains, xcorr_sig, x_correlogram, auto_correlogram
+from slay.schemas import OutputParams, RunParams
+from slay.xcorr import bin_spike_trains, calc_xcorr_sig, x_correlogram, auto_correlogram

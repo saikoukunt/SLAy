@@ -9,7 +9,9 @@ import torch
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-import slay
+from .autoencoder import CN_AE, SpikeDataset, generate_train_data, train_ae
+from .stages import calc_ae_sim, calc_ref_p, calc_xcorr_metric, merge_clusters
+from .utils import calc_mean_wf, find_times_multi
 
 
 def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int]:
@@ -48,7 +50,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = slay.find_times_multi(
+    times_multi = find_times_multi(
         times,
         clusters,
         np.arange(n_clust),
@@ -66,7 +68,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         (counts > params["min_spikes"]) & (cl_labels["label"].isin(params["good_lbls"]))
     ).flatten()
 
-    mean_wf = slay.calc_mean_wf(
+    mean_wf = calc_mean_wf(
         params,
         n_clust,
         good_ids,
@@ -94,9 +96,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         "num_chan": params["ae_chan"],
         "for_shft": params["ae_shft"],
     }
-    spk_snips, cl_ids = slay.generate_train_data(
-        data, ci, channel_pos, ext_params, params
-    )
+    spk_snips, cl_ids = generate_train_data(data, ci, channel_pos, ext_params, params)
     # Train the autoencoder if needed.
     model_path = (
         params["model_path"]
@@ -105,7 +105,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
     )
     if not os.path.exists(model_path):
         tqdm.write("Training autoencoder...")
-        net, spk_data = slay.train_ae(
+        net, spk_data = train_ae(
             spk_snips,
             cl_ids,
             counts,
@@ -119,13 +119,13 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
         tqdm.write(f"Autoencoder saved in {model_path}")
     else:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        net = slay.CN_AE().to(device)
+        net = CN_AE().to(device)
         net.load_state_dict(torch.load(model_path, weights_only=True))
         net.eval()
-        spk_data = slay.SpikeDataset(spk_snips, cl_ids)
+        spk_data = SpikeDataset(spk_snips, cl_ids)
 
     # Calculate similarity using distances in the autoencoder latent space.
-    sim, _, _, _ = slay.calc_ae_sim(mean_wf, net, peak_chans, spk_data, good_ids)
+    sim, _, _, _ = calc_ae_sim(mean_wf, net, peak_chans, spk_data, good_ids)
     pass_ms = sim > params["sim_thresh"]
 
     pass_ms = sim > params["sim_thresh"]
@@ -135,13 +135,13 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
     # Calculate a significance metric for cross-correlograms.
     tqdm.write("Calculating cross-correlation metric...")
-    xcorr_sig, _ = slay.calc_xcorr_metric(times_multi, n_clust, pass_ms, params)
+    xcorr_sig, _ = calc_xcorr_metric(times_multi, n_clust, pass_ms, params)
 
     t4 = time.time()
     xcorr_time = time.strftime("%H:%M:%S", time.gmtime(t4 - t1))
     # Calculate a refractor period penalty.
     tqdm.write("Calculating refractory period penalty...")
-    ref_pen, ref_base, ref_obs = slay.calc_ref_p(
+    ref_pen, ref_base, ref_obs = calc_ref_p(
         times_multi, n_clust, pass_ms, xcorr_sig, params
     )
     t5 = time.time()
@@ -196,7 +196,7 @@ def run_merge(params: dict[str, Any]) -> tuple[str, str, str, str, str, int, int
 
     # Calculate merges.
     tqdm.write("Calculating merge suggestions...")
-    old2new, new2old = slay.merge_clusters(clusters, mean_wf, final_metric, params)
+    old2new, new2old = merge_clusters(clusters, mean_wf, final_metric, params)
 
     t6 = time.time()
     merge_time: str = time.strftime("%H:%M:%S", time.gmtime(t6 - t5))

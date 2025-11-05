@@ -13,12 +13,12 @@ import cupy as cp
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from scipy.stats import wasserstein_distance
-from tqdm import tqdm
 from scipy import stats
 from scipy.signal import butter, sosfiltfilt
+from scipy.stats import wasserstein_distance
+from tqdm import tqdm
 
-import slay
+from .xcorr import auto_correlogram, bin_spike_trains
 
 
 def parse_cmd_line_args() -> dict[str, Any]:
@@ -132,7 +132,7 @@ def load_ks_files(params):
     data = np.reshape(rawData, (int(rawData.size / params["n_chan"]), params["n_chan"]))
 
     n_clust = clusters.max() + 1
-    times_multi = slay.find_times_multi(
+    times_multi = find_times_multi(
         times / 30000,
         clusters,
         np.arange(n_clust),
@@ -339,7 +339,7 @@ def calc_sliding_RP_viol(
         if times.shape[0] <= 1:
             RP_viol[i] = 0
         else:
-            acg = slay.auto_correlogram(
+            acg = auto_correlogram(
                 times, window_size, bin_size / 1000, overlap_tol / 30000
             )
             RP_viol[i] = _sliding_RP_viol(
@@ -511,7 +511,7 @@ def calc_fr_unif(
             spike_times.append(times_multi[clust])
 
         spike_times = np.concatenate(spike_times)
-        c1, _ = slay.bin_spike_trains(spike_times, spike_times, 20)
+        c1, _ = bin_spike_trains(spike_times, spike_times, 20)
         n = c1.shape[0]
         merged_ds[i] = 1 - wasserstein_distance(
             u_values=np.arange(n) / n,
@@ -524,7 +524,7 @@ def calc_fr_unif(
     for i in range(len(old2new.keys())):
         clust = int(list(old2new.keys())[i])
         spike_times = times_multi[clust]
-        c1, _ = slay.bin_spike_trains(spike_times, spike_times, 20)
+        c1, _ = bin_spike_trains(spike_times, spike_times, 20)
         n = c1.shape[0]
         single_ds[i] = 1 - wasserstein_distance(
             u_values=np.arange(n) / n,

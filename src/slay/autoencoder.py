@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 from tqdm import tqdm
 
-import slay
+from .utils import find_best_channels, get_dists
 
 
 def generate_train_data(
@@ -55,10 +55,10 @@ def generate_train_data(
     # Pre-compute the set of closest channels for each channel.
     chans = {}
     for id in ci["good_ids"]:
-        chs, peak = slay.find_best_channels(
+        chs, peak = find_best_channels(
             ci["mean_wf"][id], channel_pos, params["n_chan"], ext_params["num_chan"]
         )
-        dists = slay.get_dists(channel_pos, peak, chs)
+        dists = get_dists(channel_pos, peak, chs)
         chans[id] = chs[np.argsort(dists)].tolist()
 
     if ext_params["for_shft"]:

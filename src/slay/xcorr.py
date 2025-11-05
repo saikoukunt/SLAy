@@ -153,7 +153,7 @@ def _correlogram(
     return corrgram
 
 
-def xcorr_sig(
+def calc_xcorr_sig(
     xgram: NDArray[np.float64],
     xcorr_bin_width: float,
     min_xcorr_rate: float,

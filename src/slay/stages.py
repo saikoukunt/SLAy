@@ -15,14 +15,17 @@ from sklearn.neighbors import NearestNeighbors
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import slay
+from .autoencoder import SpikeDataset
+from .cluster_metrics import wf_means_similarity
+from .utils import _sliding_RP_viol
+from .xcorr import calc_xcorr_sig, x_correlogram
 
 
 def calc_ae_sim(
     mean_wf: NDArray[np.float64],
     model: nn.Module,
     peak_chans: NDArray[np.int_],
-    spk_data: slay.SpikeDataset,
+    spk_data: SpikeDataset,
     good_ids: NDArray[np.int_],
     zDim: int = 15,
     sf: int = 1,
@@ -105,7 +108,7 @@ def calc_ae_sim(
     ae_dist = dist.squareform(dist.pdist(lat_mean[:, :zDim], "euclidean"))
 
     # similarity threshold for further analysis -- calibrated to 0.6 mean wf similarity
-    mean_sim = slay.wf_means_similarity(
+    mean_sim = wf_means_similarity(
         mean_wf=mean_wf,
         cl_good=good_ids,
         use_jitter=False,
@@ -195,7 +198,7 @@ def calc_xcorr_metric(
     for c1 in range(n_clust):
         for c2 in range(c1 + 1, n_clust):
             if pass_ms[c1, c2]:
-                xcorr_sig[c1, c2] = slay.xcorr_sig(
+                xcorr_sig[c1, c2] = calc_xcorr_sig(
                     xgrams[c1, c2],
                     xcorr_bin_width=params["xcorr_bin_width"],
                     min_xcorr_rate=params["min_xcorr_rate"],
@@ -388,7 +391,7 @@ def xcorr_func(
     c1_times = times_multi[c1] / params["sample_rate"]
     c2_times = times_multi[c2] / params["sample_rate"]
     # compute xgrams
-    return slay.x_correlogram(
+    return x_correlogram(
         c1_times,
         c2_times,
         params["window_size"],
@@ -424,7 +427,7 @@ def ref_p_func(
     c2_times = times_multi[c2] / params["sample_rate"]
 
     # Calculate cross-correlogram.
-    ccg = slay.x_correlogram(
+    ccg = x_correlogram(
         c1_times,
         c2_times,
         window_size=2,
@@ -432,7 +435,7 @@ def ref_p_func(
         overlap_tol=params["overlap_tol"],
     )
 
-    return slay._sliding_RP_viol(ccg, params["ref_pen_bin_width"], params["max_viol"])
+    return _sliding_RP_viol(ccg, params["ref_pen_bin_width"], params["max_viol"])
 
 
 def accept_all_merges(vals, params) -> None:
