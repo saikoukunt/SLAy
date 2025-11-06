@@ -11,7 +11,7 @@
 ## Running SLAy
 
 ### Setting default parameters
-[`slay/schemas.py`](./slay/schemas.py) contains the names and descriptions of all parameters, and their default values can be changed there (or parameters may be passed in when calling run function). The default parameters work across a variety of brain regions and animal models, but you can adjust the defaults for your own preferences. Some parameters you may want to change are:
+[`slay/schemas.py`](./slay/schemas.py) contains the names and descriptions of all parameters, and their default values can be changed there (or parameters may be passed in when calling the `run_slay` function). The default parameters work pretty well across a variety of brain regions and animal models, but you can adjust the defaults for your own preferences. Some parameters you may want to change are:
 
 - `'auto_accept_merges'` : If True, all the suggested merges will be automatically accepted and the KS files (`spike_clusters.npy`) will be overwritten. If False, the merges will be plotted in the `{ks_dir}/automerge/merges` folder. **Defaults to False**.
 
@@ -30,8 +30,8 @@ If you don't want to edit the default parameters, you can also pass in parameter
 
 ### Option 1: Run from a python script (recommended)
 
-To run SLAy from a python script, you can call `slay.run.main()` and pass in a dictionary containing the `'KS_folder'` (this is the folder contain params.py for Phy), and any non-default parameters you want to set.\
-For example, in the snippet below from [`scripts/auto_slay.py`](./scripts/auto_slay.py), we set the `plot_merges`, `max_spikes`, and `auto_accept_merges` parameters and run SLAy on all KS2.5-sorted recordings in the `data_dir` folder:
+To run SLAy from a python script, you can call `slay.run.main()` and pass in a dictionary containing the `'KS_folder'` (this is the folder containing params.py for Phy), and any non-default parameters you want to set.\
+For example, in the snippet below from [`scripts/auto_slay.py`](./scripts/auto_slay.py), we set the `plot_merges`, `max_spikes`, and `auto_accept_merges` parameters and run SLAy on all KS4-sorted recordings in the `data_dir` folder:
 
 ```python
 import os
@@ -47,10 +47,10 @@ if __name__ == "__main__":
 
     data_dir = "D:/SLAY_data/"
 
-    # Automatically finds all KS 2.5 folders in the data directory
+    # Automatically finds all KS 4 folders in the data directory
     for root, dirs, files in os.walk(data_dir):
         for dir_name in dirs:
-            if "ks25" in dir_name:
+            if "ks4" in dir_name:
                 ks_dir = os.path.join(root, dir_name)
                 print(ks_dir)
                 slay.run_slay({"KS_folder": ks_dir, **merge_params})
