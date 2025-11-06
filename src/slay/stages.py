@@ -439,8 +439,32 @@ def accept_all_merges(vals, params) -> None:
         merges = {int(k): v for k, v in sorted(merges.items())}
 
     data, cl_labels, mean_wf, n_spikes, spike_times, spike_clusters, times_multi = vals
+    spike_amplitudes = np.load(os.path.join(params["KS_folder"], "amplitudes.npy"))
+    spike_templates = np.load(os.path.join(params["KS_folder"], "spike_templates.npy"))
 
-    # save backups of spike_times and spike_clusters
+    if os.path.exists(os.path.join(params["KS_folder"], "pc_features.npy")):
+        spike_pc_features = np.load(
+            os.path.join(params["KS_folder"], "pc_features.npy")
+        )
+        np.save(
+            os.path.join(params["KS_folder"], "pc_features_orig.npy"),
+            spike_pc_features,
+        )
+    else:
+        spike_pc_features = None
+
+    if os.path.exists(os.path.join(params["KS_folder"], "template_features.npy")):
+        spike_template_features = np.load(
+            os.path.join(params["KS_folder"], "template_features.npy")
+        )
+        np.save(
+            os.path.join(params["KS_folder"], "template_features_orig.npy"),
+            spike_template_features,
+        )
+    else:
+        spike_template_features = None
+
+    # save backups of spike files
     np.save(
         os.path.join(params["KS_folder"], "spike_times_orig.npy"),
         spike_times,
@@ -449,14 +473,31 @@ def accept_all_merges(vals, params) -> None:
         os.path.join(params["KS_folder"], "spike_clusters_orig.npy"),
         spike_clusters,
     )
+    np.save(os.path.join(params["KS_folder"], "amplitudes_orig.npy"), spike_amplitudes)
+    np.save(
+        os.path.join(params["KS_folder"], "spike_templates_orig.npy"), spike_templates
+    )
 
     for new_id, old_ids in merges.items():
-        mean_wf, cl_labels, spike_times, spike_clusters = accept_merge(
+        (
+            mean_wf,
+            cl_labels,
+            spike_times,
+            spike_clusters,
+            spike_amplitudes,
+            spike_templates,
+            spike_pc_features,
+            spike_template_features,
+        ) = accept_merge(
             cl_labels,
             mean_wf,
             n_spikes,
             spike_times,
             spike_clusters,
+            spike_amplitudes,
+            spike_templates,
+            spike_pc_features,
+            spike_template_features,
             times_multi,
             params,
             old_ids,
@@ -471,6 +512,17 @@ def accept_all_merges(vals, params) -> None:
     cl_labels.to_csv(os.path.join(params["KS_folder"], "cluster_group.tsv"), sep="\t")
     np.save(os.path.join(params["KS_folder"], "spike_clusters.npy"), spike_clusters)
     np.save(os.path.join(params["KS_folder"], "spike_times.npy"), spike_times)
+    np.save(os.path.join(params["KS_folder"], "amplitudes.npy"), spike_amplitudes)
+    np.save(os.path.join(params["KS_folder"], "spike_templates.npy"), spike_templates)
+
+    if os.path.exists(os.path.join(params["KS_folder"], "pc_features.npy")):
+        np.save(os.path.join(params["KS_folder"], "pc_features.npy"), spike_pc_features)
+
+    if os.path.exists(os.path.join(params["KS_folder"], "template_features.npy")):
+        np.save(
+            os.path.join(params["KS_folder"], "template_features.npy"),
+            spike_template_features,
+        )
 
 
 def accept_merge(
@@ -479,12 +531,15 @@ def accept_merge(
     n_spikes,
     spike_times,
     spike_clusters,
+    spike_amplitudes,
+    spike_templates,
+    spike_pc_features,
+    spike_template_features,
     times_multi,
     params,
     old_ids: list[int],
     new_id,
 ) -> int:
-    # TODO change old_row data to 0's?
     """
     Merge clusters together into a new cluster.
 
@@ -500,8 +555,22 @@ def accept_merge(
         print(f"New cluster_id {new_id} already exists, skipping merge")
         return mean_wf, cl_labels, spike_times, spike_clusters
 
-    new_spike_times, new_spike_clusters = remove_duplicate_spikes(
-        times_multi, spike_times, spike_clusters, old_ids
+    (
+        new_spike_times,
+        new_spike_clusters,
+        new_spike_amplitudes,
+        new_spike_templates,
+        new_spike_pc_features,
+        new_spike_template_features,
+    ) = remove_duplicate_spikes(
+        times_multi,
+        spike_times,
+        spike_clusters,
+        spike_amplitudes,
+        spike_templates,
+        spike_pc_features,
+        spike_template_features,
+        old_ids,
     )
 
     # calculate new mean_wf and std_wf as weighted average, will be slightly affected by duplicated spike_times, but so minimal
@@ -532,11 +601,28 @@ def accept_merge(
     cl_labels.loc[old_ids, "label"] = "merged"
     cl_labels.loc[old_ids, "label_reason"] = f"merged into cluster_id {new_id}"
 
-    return new_mean_wf, cl_labels, new_spike_times, new_spike_clusters
+    return (
+        new_mean_wf,
+        cl_labels,
+        new_spike_times,
+        new_spike_clusters,
+        new_spike_amplitudes,
+        new_spike_templates,
+        new_spike_pc_features,
+        new_spike_template_features,
+    )
 
 
 def remove_duplicate_spikes(
-    times_multi, spike_times, spike_clusters, old_ids, n_samples=5
+    times_multi,
+    spike_times,
+    spike_clusters,
+    spike_amplitudes,
+    spike_templates,
+    spike_pc_features,
+    spike_template_features,
+    old_ids,
+    n_samples=5,
 ):
     combined_spike_times = times_multi[old_ids[0]]
     for old_id in old_ids[1:]:
@@ -563,8 +649,23 @@ def remove_duplicate_spikes(
         duplicate_idxs = np.intersect1d(cluster_idxs, duplicate_idxs)
 
         assert len(duplicate_idxs) == len(duplicate_times)
-        # for each duplicate spike, remove associated spike_time and spike_cluster
+        # for each duplicate spike, remove associated spikes from KS files
         spike_times = np.delete(spike_times, duplicate_idxs)
         spike_clusters = np.delete(spike_clusters, duplicate_idxs)
+        spike_amplitudes = np.delete(spike_amplitudes, duplicate_idxs)
+        spike_templates = np.delete(spike_templates, duplicate_idxs)
+        if spike_pc_features is not None:
+            spike_pc_features = np.delete(spike_pc_features, duplicate_idxs, axis=0)
+        if spike_template_features is not None:
+            spike_template_features = np.delete(
+                spike_template_features, duplicate_idxs, axis=0
+            )
 
-    return spike_times, spike_clusters
+    return (
+        spike_times,
+        spike_clusters,
+        spike_amplitudes,
+        spike_templates,
+        spike_pc_features,
+        spike_template_features,
+    )
