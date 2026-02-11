@@ -1,6 +1,6 @@
 import os
 from collections import deque
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import torch
@@ -149,7 +149,7 @@ def compute_slay_merges(
         "num_chan": 8,
     },
     autoencoder_architecture: type = CN_AE,
-    autoencoder_train_fn: callable = train_ae,
+    autoencoder_train_fn: Callable = train_ae,
     similarity_threshold: float = 0.4,
     retrain_autoencoder: bool = False,
     model_path: str | None = None,

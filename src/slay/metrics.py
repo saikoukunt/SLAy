@@ -147,8 +147,8 @@ def _compute_ccg_metric_pair(
     # calculate low-pass filtered second derivative of ccg
     fs = 1 / bin_size_s
     cutoff_freq = 100
-    nyqist = fs / 2
-    cutoff = cutoff_freq / nyqist
+    nyquist = fs / 2
+    cutoff = cutoff_freq / nyquist
     peak_width = 0.002 / bin_size_s
 
     ccg_double_derivative = np.diff(ccg, 2)
