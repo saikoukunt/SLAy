@@ -11,6 +11,38 @@ def make_artificial_splits(sorting_analyzer, random_seed=0):
 def make_drift_splits(
     sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
 ):
+    """
+    Create artificial splits simulating drift-related oversplitting.
+
+    Splits units by time with a linearly increasing probability of splitting spikes
+    as the recording progresses. Spikes in the first 40% of the recording have a
+    0-20% chance of being split, spikes between 40-60% have a 20-80% chance, and
+    spikes in the latter 40% have an 80-100% chance.
+
+    Parameters
+    ----------
+    sorting_analyzer : SortingAnalyzer
+        The sorting analyzer containing the units to split.
+    splitting_probability : float
+        The proportion of units to split (0-1).
+    splittable_ids : array-like, optional
+        Specific unit IDs to consider for splitting. If None, all units are considered.
+    random_seed : int, default: 0
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    new_sorting : NumpySorting
+        A new sorting object with the artificial splits applied.
+    split_pairs : list of tuple
+        List of (original_unit_id, new_unit_id) pairs indicating which units were split.
+
+    Notes
+    -----
+    Only single-segment recordings are supported.
+    Only units with at least 30% of spikes in each half of the recording are
+    considered as split candidates.
+    """
     if splittable_ids is None:
         splittable_ids = sorting_analyzer.unit_ids
     sorting = sorting_analyzer.sorting
@@ -90,6 +122,37 @@ def make_drift_splits(
 def make_amplitude_splits(
     sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
 ):
+    """
+    Create artificial splits simulating amplitude-based oversplitting.
+
+    Splits units by separating spikes with higher amplitudes from those with lower
+    amplitudes.
+
+    Parameters
+    ----------
+    sorting_analyzer : SortingAnalyzer
+        The sorting analyzer containing the units to split.
+    splitting_probability : float
+        The proportion of units to split (0-1).
+    splittable_ids : array-like, optional
+        Specific unit IDs to consider for splitting. If None, all units are considered.
+    random_seed : int, default: 0
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    new_sorting : NumpySorting
+        A new sorting object with the artificial splits applied.
+    split_pairs : list of tuple
+        List of (original_unit_id, new_unit_id) pairs indicating which units were split.
+
+    Notes
+    -----
+    Only single-segment recordings are supported.
+    Requires the 'spike_amplitudes' extension, which will be computed if not present.
+    Only units with amplitude variance between the 75th and 95th percentile are
+    considered as split candidates.
+    """
     if not sorting_analyzer.has_extension("spike_amplitudes"):
         sorting_analyzer.compute("spike_amplitudes")
     if splittable_ids is None:
@@ -145,6 +208,35 @@ def make_amplitude_splits(
 def make_burst_splits(
     sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
 ):
+    """
+    Create artificial splits simulating burst-related oversplitting.
+
+    Splits units by separating the second half of each burst into a new unit.
+
+    Parameters
+    ----------
+    sorting_analyzer : SortingAnalyzer
+        The sorting analyzer containing the units to split.
+    splitting_probability : float
+        The proportion of units to split (0-1).
+    splittable_ids : array-like, optional
+        Specific unit IDs to consider for splitting. If None, all units are considered.
+    random_seed : int, default: 0
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    new_sorting : NumpySorting
+        A new sorting object with the artificial splits applied.
+    split_pairs : list of tuple
+        List of (original_unit_id, new_unit_id) pairs indicating which units were split.
+
+    Notes
+    -----
+    Only single-segment recordings are supported.
+    Only units with at least 30% of spikes in bursts are considered as split candidates.
+    Bursts are defined as 3 or more consecutive spikes with inter-spike intervals < 20ms.
+    """
     if splittable_ids is None:
         splittable_ids = sorting_analyzer.unit_ids
     sorting = sorting_analyzer.sorting
@@ -203,6 +295,32 @@ def make_burst_splits(
 def make_random_splits(
     sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
 ):
+    """
+    Create artificial splits by randomly assigning spikes to a new unit.
+
+    Parameters
+    ----------
+    sorting_analyzer : SortingAnalyzer
+        The sorting analyzer containing the units to split.
+    splitting_probability : float
+        The proportion of units to split (0-1).
+    splittable_ids : array-like, optional
+        Specific unit IDs to consider for splitting. If None, all units are considered.
+    random_seed : int, default: 0
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    new_sorting : NumpySorting
+        A new sorting object with the artificial splits applied.
+    split_pairs : list of tuple
+        List of (original_unit_id, new_unit_id) pairs indicating which units were split.
+
+    Notes
+    -----
+    Only single-segment recordings are supported.
+    All units in splittable_ids are candidates for splitting.
+    """
     if splittable_ids is None:
         splittable_ids = sorting_analyzer.unit_ids
 
@@ -254,6 +372,12 @@ def make_random_splits(
 def _split_spike_portion(
     spike_idxs, spike_times, start_sample, end_sample, start_prob, end_prob, rng
 ):
+    """
+    Split spikes in a time window with linearly varying probability.
+
+    The probability of splitting increases linearly from start_prob at start_sample
+    to end_prob at end_sample.
+    """
     portion_idxs = np.intersect1d(
         np.argwhere(spike_times >= start_sample).flatten(),
         np.argwhere(spike_times < end_sample).flatten(),
@@ -277,6 +401,12 @@ def _split_spike_portion(
 def _get_drift_split_candidates(
     splittable_ids, spikes, spike_indices, total_samples, min_percent_per_half=0.3
 ):
+    """
+    Identify units suitable for drift-based splitting.
+
+    Returns units that have at least min_percent_per_half of spikes in each half
+    of the recording, ensuring the unit is active throughout the recording.
+    """
     split_candidates = []
 
     # drift split candidates have at least min_percent_per_half of spikes in each half of the recording
@@ -302,6 +432,12 @@ def _get_amplitude_split_candidates(
     low_cutoff=75,
     high_cutoff=95,
 ):
+    """
+    Identify units suitable for amplitude-based splitting.
+
+    Returns units with amplitude variance between the low_cutoff and high_cutoff
+    percentiles, ensuring sufficient amplitude variation for meaningful splits.
+    """
     amplitude_variances = []
 
     for unit_id in splittable_ids:
@@ -331,6 +467,13 @@ def _get_burst_split_candidates(
     isi_threshold_s=0.02,
     min_burst_fraction=0.3,
 ):
+    """
+    Identify units suitable for burst-based splitting.
+
+    Returns units with at least min_burst_fraction of spikes in bursts, where bursts
+    are defined as 3+ consecutive spikes with ISI < isi_threshold_s. Also returns
+    the burst locations for each candidate unit.
+    """
     split_candidates = []
     bursts = {}
     for unit_id in splittable_ids:
