@@ -103,6 +103,7 @@ def extract_spike_snippets(
             autoencoder_params["num_chan"],
             num_samples,
         ),
+        dtype=np.float32,
     )
     spike_labels = np.zeros(num_snippets, dtype="int32")
 
@@ -123,9 +124,6 @@ def extract_spike_snippets(
         for i, spike_time in enumerate(spike_times):
             start_frame = int(spike_time - num_samples_before)
             end_frame = int(spike_time + num_samples_after)
-
-            if start_frame < 0 or end_frame > recording.get_num_frames():
-                continue
 
             snippets[i] = recording.get_traces(
                 start_frame=start_frame,
@@ -499,16 +497,21 @@ def compute_autoencoder_similarity(
             unit_j_peak_chan = peak_chans[unit_ids[j]]
 
             # Penalize by sigmoided version of geometric mean of cross-decay
-            try:
+            if (
+                (amplitudes[i, unit_j_peak_chan] == 0)
+                or (amplitudes[i, unit_i_peak_chan] == 0)
+                or (amplitudes[j, unit_i_peak_chan] == 0)
+                or (amplitudes[j, unit_j_peak_chan] == 0)
+            ):
+                autoencoder_similarity[i, j] = 0
+                continue
+            else:
                 decay_pen_raw = np.sqrt(
                     amplitudes[i, unit_j_peak_chan]
                     / amplitudes[i, unit_i_peak_chan]
                     * amplitudes[j, unit_i_peak_chan]
                     / amplitudes[j, unit_j_peak_chan]
                 )
-            except ZeroDivisionError:
-                autoencoder_similarity[i, j] = 0
-                continue
 
             decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
 

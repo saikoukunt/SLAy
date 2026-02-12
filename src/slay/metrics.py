@@ -112,6 +112,9 @@ def compute_refractory_penalty(
         refractory_penalty[unit_index_i, unit_index_j] = _sliding_RP_viol_pair(
             ccg, bin_size_ms, maximum_contamination
         )
+        refractory_penalty[unit_index_j, unit_index_i] = refractory_penalty[
+            unit_index_i, unit_index_j
+        ]
 
     return refractory_penalty
 

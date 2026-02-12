@@ -56,7 +56,7 @@ def find_merges(
 
     # find channel with peak amplitude for each cluster
     templates_ext = sorting_analyzer.get_extension("templates")
-    templates = templates_ext.get_data()  # shape: (n_units, n_samples, n_channels)
+    templates = templates_ext.get_templates()
     channel_amplitudes = np.max(templates, axis=1) - np.min(templates, axis=1)
     peak_chan_indices = np.argmax(channel_amplitudes, axis=1)
 
@@ -160,7 +160,7 @@ def compute_slay_merges(
     },
     maximum_contamination: float = 0.15,
     similarity_type: str = "autoencoder",
-    job_kwargs: dict[str, Any] = {},
+    **job_kwargs: dict[str, Any],
 ) -> tuple[list[list[int]], SortingAnalyzer, dict[str, NDArray[np.floating]]]:
     """
     Compute unit merges using the SLAy algorithm.
@@ -237,7 +237,7 @@ def compute_slay_merges(
                 and os.path.exists(model_path)
             ):
                 autoencoder = autoencoder_architecture().to(device)
-                autoencoder.load_state_dict(torch.load(model_path))
+                autoencoder.load_state_dict(torch.load(model_path, map_location=device))
                 spike_dataset = SpikeDataset(spike_snippets, unit_ids)
             else:
                 autoencoder, spike_dataset = autoencoder_train_fn(
