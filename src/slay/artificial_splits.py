@@ -1,15 +1,94 @@
 import numpy as np
 from spikeinterface.core.sorting_tools import spike_vector_to_indices
 from spikeinterface.core.numpyextractors import NumpySorting
+from spikeinterface import create_sorting_analyzer
 
 
-def make_artificial_splits(sorting_analyzer, random_seed=0):
+def make_artificial_splits(sorting_analyzer, splitting_probability, random_seed=0):
+    """
+    Create artificial splits using multiple splitting strategies.
 
-    pass
+    Applies splits in order of most to least restrictive candidate criteria:
+    burst -> amplitude -> drift -> random
+
+    Only units with >= 1000 spikes are eligible for splitting.
+    Each unit can only be split once, and units created from splits
+    cannot be split again.
+
+    Parameters
+    ----------
+    sorting_analyzer : SortingAnalyzer
+        The sorting analyzer containing units to split
+    random_seed : int, default: 0
+        Random seed for reproducibility
+
+    Returns
+    -------
+    new_analyzer : SortingAnalyzer
+        New sorting analyzer with artificial splits applied, using the
+        same recording as the input analyzer
+    all_split_pairs : list of tuple
+        All (original_unit_id, new_unit_id, split_type) tuples from all split types
+    """
+    splittable_ids = []
+    for unit_id in sorting_analyzer.unit_ids:
+        spike_train = sorting_analyzer.sorting.get_unit_spike_train(unit_id)
+        if len(spike_train) >= 1000:
+            splittable_ids.append(unit_id)
+
+    current_sorting = sorting_analyzer.sorting
+    current_recording = sorting_analyzer.recording
+    sampling_frequency = sorting_analyzer.sampling_frequency
+    all_split_pairs = []
+
+    # Pre-compute spike amplitudes once for amplitude splits
+    if not sorting_analyzer.has_extension("spike_amplitudes"):
+        sorting_analyzer.compute("spike_amplitudes")
+    spike_amplitudes = sorting_analyzer.get_extension("spike_amplitudes").get_data()
+
+    split_pipeline = [
+        ("burst", make_burst_splits, splitting_probability / 4),
+        ("amplitude", make_amplitude_splits, splitting_probability / 4),
+        ("drift", make_drift_splits, splitting_probability / 4),
+        ("random", make_random_splits, splitting_probability / 4),
+    ]
+
+    for split_name, split_function, probability in split_pipeline:
+        if len(splittable_ids) == 0:
+            break
+
+        new_sorting, split_pairs = split_function(
+            current_sorting,
+            sampling_frequency=sampling_frequency,
+            splitting_probability=probability,
+            splittable_ids=splittable_ids,
+            spike_amplitudes=spike_amplitudes if split_name == "amplitude" else None,
+            random_seed=random_seed,
+        )
+
+        current_sorting = new_sorting
+        current_sorting.register_recording(current_recording)
+        all_split_pairs.extend(
+            [(orig_id, new_id, split_name) for orig_id, new_id in split_pairs]
+        )
+
+        split_units = {original_id for original_id, new_id in split_pairs}
+        splittable_ids = [uid for uid in splittable_ids if uid not in split_units]
+
+    final_analyzer = create_sorting_analyzer(
+        current_sorting, current_recording, format="memory"
+    )
+
+    return final_analyzer, all_split_pairs
 
 
 def make_drift_splits(
-    sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
+    sorting,
+    sampling_frequency,
+    splitting_probability,
+    splittable_ids=None,
+    spike_amplitudes=None,
+    random_seed=0,
 ):
     """
     Create artificial splits simulating drift-related oversplitting.
@@ -21,12 +100,16 @@ def make_drift_splits(
 
     Parameters
     ----------
-    sorting_analyzer : SortingAnalyzer
-        The sorting analyzer containing the units to split.
+    sorting : BaseSorting
+        The sorting object containing the units to split.
+    sampling_frequency : float
+        The sampling frequency of the recording.
     splitting_probability : float
         The proportion of units to split (0-1).
     splittable_ids : array-like, optional
         Specific unit IDs to consider for splitting. If None, all units are considered.
+    spike_amplitudes : array-like, optional
+        Ignored for drift splits, included for consistent API.
     random_seed : int, default: 0
         Random seed for reproducibility.
 
@@ -44,18 +127,17 @@ def make_drift_splits(
     considered as split candidates.
     """
     if splittable_ids is None:
-        splittable_ids = sorting_analyzer.unit_ids
-    sorting = sorting_analyzer.sorting
+        splittable_ids = sorting.unit_ids
     rng = np.random.default_rng(random_seed)
 
-    num_splits = int(splitting_probability * len(sorting_analyzer.unit_ids))
+    num_splits = int(splitting_probability * len(sorting.unit_ids))
     spikes = sorting.to_spike_vector(concatenated=False)
     assert len(spikes) == 1, "Only single-segment recordings supported"
 
     spike_indices = spike_vector_to_indices(
-        spikes, sorting_analyzer.unit_ids, absolute_index=True
+        spikes, sorting.unit_ids, absolute_index=True
     )
-    total_samples = sorting_analyzer.recording.get_num_samples()
+    total_samples = sorting.get_num_samples()
 
     split_candidates = _get_drift_split_candidates(
         splittable_ids, spikes, spike_indices, total_samples
@@ -68,9 +150,9 @@ def make_drift_splits(
     drift_cutoff_1 = int(total_samples * 0.4)
     drift_cutoff_2 = int(total_samples * 0.6)
 
-    new_id = max(sorting_analyzer.unit_ids) + 1
-    new_unit_ids = list(sorting_analyzer.unit_ids)
-    new_idx = len(sorting_analyzer.unit_ids)
+    new_id = max(sorting.unit_ids) + 1
+    new_unit_ids = list(sorting.unit_ids)
+    new_idx = len(sorting.unit_ids)
     split_pairs = []
     for unit_id in unit_ids_to_split:
         unit_spike_idxs = spike_indices[0][unit_id]
@@ -112,7 +194,7 @@ def make_drift_splits(
 
     new_sorting = NumpySorting(
         new_spikes,
-        sampling_frequency=sorting_analyzer.sampling_frequency,
+        sampling_frequency=sampling_frequency,
         unit_ids=new_unit_ids,
     )
 
@@ -120,7 +202,12 @@ def make_drift_splits(
 
 
 def make_amplitude_splits(
-    sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
+    sorting,
+    sampling_frequency,
+    splitting_probability,
+    splittable_ids=None,
+    spike_amplitudes=None,
+    random_seed=0,
 ):
     """
     Create artificial splits simulating amplitude-based oversplitting.
@@ -130,12 +217,16 @@ def make_amplitude_splits(
 
     Parameters
     ----------
-    sorting_analyzer : SortingAnalyzer
-        The sorting analyzer containing the units to split.
+    sorting : BaseSorting
+        The sorting object containing the units to split.
+    sampling_frequency : float
+        The sampling frequency of the recording.
     splitting_probability : float
         The proportion of units to split (0-1).
     splittable_ids : array-like, optional
         Specific unit IDs to consider for splitting. If None, all units are considered.
+    spike_amplitudes : array-like, required
+        Pre-computed spike amplitudes for all spikes.
     random_seed : int, default: 0
         Random seed for reproducibility.
 
@@ -149,25 +240,23 @@ def make_amplitude_splits(
     Notes
     -----
     Only single-segment recordings are supported.
-    Requires the 'spike_amplitudes' extension, which will be computed if not present.
+    Requires spike_amplitudes to be provided.
     Only units with amplitude variance between the 75th and 95th percentile are
     considered as split candidates.
     """
-    if not sorting_analyzer.has_extension("spike_amplitudes"):
-        sorting_analyzer.compute("spike_amplitudes")
+    if spike_amplitudes is None:
+        raise ValueError("spike_amplitudes must be provided for amplitude splits")
     if splittable_ids is None:
-        splittable_ids = sorting_analyzer.unit_ids
-    sorting = sorting_analyzer.sorting
+        splittable_ids = sorting.unit_ids
     rng = np.random.default_rng(random_seed)
 
-    num_splits = int(splitting_probability * len(sorting_analyzer.unit_ids))
+    num_splits = int(splitting_probability * len(sorting.unit_ids))
     spikes = sorting.to_spike_vector(concatenated=False)
     assert len(spikes) == 1, "Only single-segment recordings supported"
 
     spike_indices = spike_vector_to_indices(
-        spikes, sorting_analyzer.unit_ids, absolute_index=True
+        spikes, sorting.unit_ids, absolute_index=True
     )
-    spike_amplitudes = sorting_analyzer.get_extension("spike_amplitudes").get_data()
     split_candidates = _get_amplitude_split_candidates(
         splittable_ids, spike_indices, spike_amplitudes
     )
@@ -177,9 +266,9 @@ def make_amplitude_splits(
     new_spikes = spikes[0].copy()
     unit_ids_to_split = rng.choice(split_candidates, num_splits, replace=False)
 
-    new_id = max(sorting_analyzer.unit_ids) + 1
-    new_unit_ids = list(sorting_analyzer.unit_ids)
-    new_idx = len(sorting_analyzer.unit_ids)
+    new_id = max(sorting.unit_ids) + 1
+    new_unit_ids = list(sorting.unit_ids)
+    new_idx = len(sorting.unit_ids)
     split_pairs = []
 
     for unit_id in unit_ids_to_split:
@@ -198,7 +287,7 @@ def make_amplitude_splits(
 
     new_sorting = NumpySorting(
         new_spikes,
-        sampling_frequency=sorting_analyzer.sampling_frequency,
+        sampling_frequency=sampling_frequency,
         unit_ids=new_unit_ids,
     )
 
@@ -206,7 +295,12 @@ def make_amplitude_splits(
 
 
 def make_burst_splits(
-    sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
+    sorting,
+    sampling_frequency,
+    splitting_probability,
+    splittable_ids=None,
+    spike_amplitudes=None,
+    random_seed=0,
 ):
     """
     Create artificial splits simulating burst-related oversplitting.
@@ -215,12 +309,16 @@ def make_burst_splits(
 
     Parameters
     ----------
-    sorting_analyzer : SortingAnalyzer
-        The sorting analyzer containing the units to split.
+    sorting : BaseSorting
+        The sorting object containing the units to split.
+    sampling_frequency : float
+        The sampling frequency of the recording.
     splitting_probability : float
         The proportion of units to split (0-1).
     splittable_ids : array-like, optional
         Specific unit IDs to consider for splitting. If None, all units are considered.
+    spike_amplitudes : array-like, optional
+        Ignored for burst splits, included for consistent API.
     random_seed : int, default: 0
         Random seed for reproducibility.
 
@@ -238,23 +336,22 @@ def make_burst_splits(
     Bursts are defined as 3 or more consecutive spikes with inter-spike intervals < 20ms.
     """
     if splittable_ids is None:
-        splittable_ids = sorting_analyzer.unit_ids
-    sorting = sorting_analyzer.sorting
+        splittable_ids = sorting.unit_ids
     rng = np.random.default_rng(random_seed)
 
-    num_splits = int(splitting_probability * len(sorting_analyzer.unit_ids))
+    num_splits = int(splitting_probability * len(sorting.unit_ids))
     spikes = sorting.to_spike_vector(concatenated=False)
     assert len(spikes) == 1, "Only single-segment recordings supported"
 
     spike_indices = spike_vector_to_indices(
-        spikes, sorting_analyzer.unit_ids, absolute_index=True
+        spikes, sorting.unit_ids, absolute_index=True
     )
 
     split_candidates, bursts = _get_burst_split_candidates(
         splittable_ids,
         spikes,
         spike_indices,
-        sorting_analyzer.sampling_frequency,
+        sampling_frequency,
     )
     num_splits = min(num_splits, len(split_candidates))
 
@@ -262,9 +359,9 @@ def make_burst_splits(
     new_spikes = spikes[0].copy()
     unit_ids_to_split = rng.choice(split_candidates, num_splits, replace=False)
 
-    new_id = max(sorting_analyzer.unit_ids) + 1
-    new_unit_ids = list(sorting_analyzer.unit_ids)
-    new_idx = len(sorting_analyzer.unit_ids)
+    new_id = max(sorting.unit_ids) + 1
+    new_unit_ids = list(sorting.unit_ids)
+    new_idx = len(sorting.unit_ids)
     split_pairs = []
 
     for unit_id in unit_ids_to_split:
@@ -285,7 +382,7 @@ def make_burst_splits(
 
     new_sorting = NumpySorting(
         new_spikes,
-        sampling_frequency=sorting_analyzer.sampling_frequency,
+        sampling_frequency=sampling_frequency,
         unit_ids=new_unit_ids,
     )
 
@@ -293,19 +390,28 @@ def make_burst_splits(
 
 
 def make_random_splits(
-    sorting_analyzer, splitting_probability, splittable_ids=None, random_seed=0
+    sorting,
+    sampling_frequency,
+    splitting_probability,
+    splittable_ids=None,
+    spike_amplitudes=None,
+    random_seed=0,
 ):
     """
     Create artificial splits by randomly assigning spikes to a new unit.
 
     Parameters
     ----------
-    sorting_analyzer : SortingAnalyzer
-        The sorting analyzer containing the units to split.
+    sorting : BaseSorting
+        The sorting object containing the units to split.
+    sampling_frequency : float
+        The sampling frequency of the recording.
     splitting_probability : float
         The proportion of units to split (0-1).
     splittable_ids : array-like, optional
         Specific unit IDs to consider for splitting. If None, all units are considered.
+    spike_amplitudes : array-like, optional
+        Ignored for random splits, included for consistent API.
     random_seed : int, default: 0
         Random seed for reproducibility.
 
@@ -322,17 +428,16 @@ def make_random_splits(
     All units in splittable_ids are candidates for splitting.
     """
     if splittable_ids is None:
-        splittable_ids = sorting_analyzer.unit_ids
+        splittable_ids = sorting.unit_ids
 
-    sorting = sorting_analyzer.sorting
     rng = np.random.default_rng(random_seed)
 
-    num_splits = int(splitting_probability * len(sorting_analyzer.unit_ids))
+    num_splits = int(splitting_probability * len(sorting.unit_ids))
     spikes = sorting.to_spike_vector(concatenated=False)
     assert len(spikes) == 1, "Only single-segment recordings supported"
 
     spike_indices = spike_vector_to_indices(
-        spikes, sorting_analyzer.unit_ids, absolute_index=True
+        spikes, sorting.unit_ids, absolute_index=True
     )
     num_splits = min(num_splits, len(splittable_ids))
 
@@ -340,9 +445,9 @@ def make_random_splits(
     new_spikes = spikes[0].copy()
     unit_ids_to_split = rng.choice(splittable_ids, num_splits, replace=False)
 
-    new_id = max(sorting_analyzer.unit_ids) + 1
-    new_unit_ids = list(sorting_analyzer.unit_ids)
-    new_idx = len(sorting_analyzer.unit_ids)
+    new_id = max(sorting.unit_ids) + 1
+    new_unit_ids = list(sorting.unit_ids)
+    new_idx = len(sorting.unit_ids)
     split_pairs = []
 
     for unit_id in unit_ids_to_split:
@@ -362,7 +467,7 @@ def make_random_splits(
 
     new_sorting = NumpySorting(
         new_spikes,
-        sampling_frequency=sorting_analyzer.sampling_frequency,
+        sampling_frequency=sampling_frequency,
         unit_ids=new_unit_ids,
     )
 
