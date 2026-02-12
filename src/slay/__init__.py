@@ -1,4 +1,11 @@
 from slay.algorithm import compute_slay_merges, find_merges
+from slay.artificial_splits import (
+    make_artificial_splits,
+    make_amplitude_splits,
+    make_burst_splits,
+    make_drift_splits,
+    make_random_splits,
+)
 from slay.autoencoder import (
     CN_AE,
     SpikeDataset,
