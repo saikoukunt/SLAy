@@ -10,15 +10,10 @@ from .algorithm import find_merges, compute_slay_metrics
 from .artificial_splits import make_artificial_splits
 from .autoencoder import (
     CN_AE,
-    SpikeDataset,
-    compute_autoencoder_similarity,
-    extract_spike_snippets,
     train_ae,
 )
 from .metrics import (
-    compute_ccg_metric,
     compute_final_metric,
-    compute_refractory_penalty,
 )
 
 from kneed import KneeLocator
@@ -41,10 +36,11 @@ def autoselect_merge_parameters(
     },
     maximum_contamination: float = 0.15,
     parameter_combinations: NDArray[np.floating] = None,
+    random_seed=0,
 ):
     # compute metric for an analyzer with artificial splits
     split_analyzer, split_pairs = make_artificial_splits(
-        sorting_analyzer, splitting_probability=0.3
+        sorting_analyzer, splitting_probability, random_seed=random_seed
     )
 
     similarity, ccg_metric, refractory_penalty = compute_slay_metrics(
@@ -68,13 +64,12 @@ def autoselect_merge_parameters(
         ccg_metric,
         refractory_penalty,
     )
-    pareto_percents, pareto_recalls = get_pareto_frontier(percents_merged, recalls)
+    pareto_indices = get_pareto_frontier(percents_merged, recalls)
 
-    knee_locator = KneeLocator(pareto_percents, pareto_recalls)
-    best_percent_merged = knee_locator.knee
-    best_recall = knee_locator.knee_y
-    autoselected_parameters = get_closest_parameters(
-        parameter_combinations, best_percent_merged, best_recall
+    autoselected_parameters = get_best_parameters(
+        [parameter_combinations[i] for i in pareto_indices],
+        percents_merged[pareto_indices],
+        recalls[pareto_indices],
     )
 
     return autoselected_parameters, parameter_combinations
@@ -166,21 +161,26 @@ def get_pareto_frontier(percents_merged, recalls):
                 break
     pareto_indices = np.argwhere(is_pareto).flatten()
 
-    return percents_merged[pareto_indices], recalls[pareto_indices]
+    return pareto_indices
 
 
-def get_closest_parameters(parameter_combinations, percent_merged, recall):
-    knee_parameters = None
-    min_distance = float("inf")
+def get_best_parameters(parameter_combinations, percents_merged, recalls):
+    min_index = np.argmin(percents_merged)
+    max_index = np.argmax(percents_merged)
+    p1 = np.array([percents_merged[min_index], recalls[min_index]])
+    p2 = np.array([percents_merged[max_index], recalls[max_index]])
+    line = p2 - p1
 
-    for parameters in parameter_combinations:
-        # Calculate Euclidean distance to knee point
-        distance = np.sqrt(
-            (parameters["percent_merged"] - percent_merged) ** 2
-            + (parameters["recall"] - recall) ** 2
-        )
-        if distance < min_distance:
-            min_distance = distance
-            knee_parameters = parameters
+    max_distance = 0
+    best_parameters = None
+    for parameters, x, y in zip(parameter_combinations, percents_merged, recalls):
+        p = np.array([x, y])
+        v = p1 - p
+        cross = abs(line[0] * v[1] - line[1] * v[0])
+        d = cross / np.linalg.norm(line)
 
-    return knee_parameters
+        if d > max_distance:
+            max_distance = d
+            best_parameters = parameters
+
+    return best_parameters
