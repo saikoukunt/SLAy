@@ -71,7 +71,7 @@ def compute_ccg_metric(
     for unit_index_i, unit_index_j in np.argwhere(pair_mask):
         ccg = ccgs[unit_index_i, unit_index_j, :]
         ccg_metric[unit_index_i, unit_index_j] = _compute_ccg_metric_pair(
-            ccg, bin_size_ms / 1000, min_ccg_rate=800
+            ccg, bin_size_ms / 1000, min_ccg_rate=1000
         )
         ccg_metric[unit_index_j, unit_index_i] = ccg_metric[unit_index_i, unit_index_j]
     return ccg_metric

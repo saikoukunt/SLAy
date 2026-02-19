@@ -291,7 +291,7 @@ def train_ae(
     n_filt: int = 256,
     num_epochs: int = 25,
     zDim: int = 15,
-    lr: float = 1e-3,
+    lr: float = 1e-4,
     model=None,
     batch_size: int = 128,
     return_inds=False,
