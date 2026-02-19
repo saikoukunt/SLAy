@@ -9,6 +9,7 @@ dependencies = [
     "argparse>=1.4.0",
     "cupy-cuda12x>=13.6.0",
     "jupyterlab>=4.4.10",
+    "kneed>=0.8.5",
     "marshmallow>=4.1.0",
     "matplotlib>=3.10.7",
     "numpy>=2.2.6",

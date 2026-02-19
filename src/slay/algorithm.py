@@ -105,6 +105,66 @@ def compute_slay_merges(
     """
     # handle unit filtering
 
+    similarity, ccg_metric, refractory_penalty = compute_slay_metrics(
+        sorting_analyzer,
+        autoencoder_params,
+        autoencoder_architecture,
+        autoencoder_train_fn,
+        similarity_threshold,
+        retrain_autoencoder,
+        model_path,
+        correlogram_params,
+        maximum_contamination,
+        similarity_type,
+        **job_kwargs,
+    )
+
+    if merge_parameters == "auto":
+        from .autoselect_params import autoselect_merge_parameters
+
+        merge_parameters = autoselect_merge_parameters(
+            sorting_analyzer,
+            similarity,
+            ccg_metric,
+            refractory_penalty,
+        )
+    else:
+        merge_parameters = {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}
+
+    final_metric = compute_final_metric(
+        similarity, ccg_metric, refractory_penalty, merge_parameters
+    )
+
+    merges = find_merges(
+        sorting_analyzer,
+        final_metric,
+        merge_parameters["merge_threshold"],
+        max_distance=max_distance,
+    )
+
+    slay_metrics = {
+        "similarity": similarity,
+        "ccg_metric": ccg_metric,
+        "refractory_penalty": refractory_penalty,
+        "final_metric": final_metric,
+    }
+
+    return merges, sorting_analyzer, slay_metrics
+
+
+def compute_slay_metrics(
+    sorting_analyzer,
+    autoencoder_params,
+    autoencoder_architecture,
+    autoencoder_train_fn,
+    similarity_threshold,
+    retrain_autoencoder,
+    model_path,
+    correlogram_params,
+    maximum_contamination,
+    similarity_type,
+    **job_kwargs,
+):
     match similarity_type:
         case "autoencoder":
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -180,37 +240,7 @@ def compute_slay_merges(
         pair_mask,
     )
 
-    if merge_parameters == "auto":
-        from .autoselect_params import autoselect_merge_parameters
-
-        merge_parameters = autoselect_merge_parameters(
-            sorting_analyzer,
-            similarity,
-            ccg_metric,
-            refractory_penalty,
-        )
-    else:
-        merge_parameters = {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}
-
-    final_metric = compute_final_metric(
-        similarity, ccg_metric, refractory_penalty, merge_parameters
-    )
-
-    merges = find_merges(
-        sorting_analyzer,
-        final_metric,
-        merge_parameters["merge_threshold"],
-        max_distance=max_distance,
-    )
-
-    slay_metrics = {
-        "similarity": similarity,
-        "ccg_metric": ccg_metric,
-        "refractory_penalty": refractory_penalty,
-        "final_metric": final_metric,
-    }
-
-    return merges, sorting_analyzer, slay_metrics
+    return similarity, ccg_metric, refractory_penalty
 
 
 def find_merges(

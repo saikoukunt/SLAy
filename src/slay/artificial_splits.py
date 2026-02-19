@@ -8,7 +8,6 @@ def make_artificial_splits(
     sorting_analyzer: SortingAnalyzer,
     splitting_probability,
     random_seed=0,
-    widow_probability=0.5,
 ):
     """
     Create artificial splits using multiple splitting strategies.
@@ -68,28 +67,12 @@ def make_artificial_splits(
     split_ids = {}
     new_id = max(sorting_analyzer.unit_ids) + 1
     for original_id in all_split_indices.keys():
-        split_ids[original_id] = [new_id, new_id + 1]
+        split_ids[int(original_id)] = [int(new_id), int(new_id) + 1]
         new_id += 2
 
     split_analyzer = sorting_analyzer.split_units(all_split_indices)
 
-    # randomly delete a percentage of split partners (tests false positive merges)
-    widowed_ids = []
-    delete_ids = []
-    rng = np.random.default_rng(random_seed)
-    num_splits = len(list(split_ids.keys()))
-    num_widows = int(widow_probability * num_splits)
-    widow_parent_ids = rng.choice(list(split_ids.keys()), num_widows, replace=False)
-    for parent_id in widow_parent_ids:
-        unit_id1, unit_id2 = split_ids[parent_id]
-        widowed_ids.append(unit_id1)
-        delete_ids.append(unit_id2)
-
-        del split_ids[parent_id]
-
-    split_analyzer.remove_units(delete_ids)
-
-    return split_analyzer, list(split_ids.values()), widowed_ids
+    return split_analyzer, split_ids
 
 
 def get_drift_splits(
