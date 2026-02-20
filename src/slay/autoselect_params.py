@@ -72,7 +72,7 @@ def autoselect_merge_parameters(
         recalls[pareto_indices],
     )
 
-    return autoselected_parameters, parameter_combinations
+    return autoselected_parameters, parameter_combinations, split_analyzer, split_pairs
 
 
 def compute_parameter_performances(

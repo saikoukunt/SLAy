@@ -129,7 +129,7 @@ def extract_spike_snippets(
                 start_frame=start_frame,
                 end_frame=end_frame,
                 channel_ids=desired_channels,
-                return_in_uV=True,
+                return_in_uV=False,
             ).T
 
         # Store unit labels and waveforms
@@ -513,9 +513,9 @@ def compute_autoencoder_similarity(
                     / amplitudes[j, unit_j_peak_chan]
                 )
 
-            decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
+            # decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
 
-            autoencoder_similarity[i, j] *= decay_pen
+            autoencoder_similarity[i, j] *= decay_pen_raw
             autoencoder_similarity[j, i] = autoencoder_similarity[i, j]
 
     return autoencoder_similarity

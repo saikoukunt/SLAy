@@ -25,7 +25,8 @@ from .metrics import (
 def compute_slay_merges(
     sorting_analyzer: SortingAnalyzer,
     merge_parameters: Any = "auto",
-    max_distance: int = 10,
+    splitting_probability: float = 0.3,
+    max_distance: int = 1000,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
     },
@@ -36,7 +37,7 @@ def compute_slay_merges(
     model_path: str | None = None,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 1,
+        "bin_ms": 0.5,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -124,6 +125,8 @@ def compute_slay_merges(
 
         merge_parameters = autoselect_merge_parameters(
             sorting_analyzer,
+            splitting_probability,
+            similarity_type,
             similarity,
             ccg_metric,
             refractory_penalty,
@@ -247,7 +250,7 @@ def find_merges(
     sorting_analyzer: SortingAnalyzer,
     final_metric: NDArray[np.floating],
     merge_threshold: float,
-    max_distance: int = 40,
+    max_distance: int = 100,
 ) -> list[list[int]]:
     """
     Find cluster merges based on final metric values.
