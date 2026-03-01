@@ -26,7 +26,7 @@ def compute_slay_merges(
     sorting_analyzer: SortingAnalyzer,
     merge_parameters: Any = "auto",
     splitting_probability: float = 0.3,
-    max_distance: int = 1000,
+    max_distance: int = 60,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
     },
@@ -172,10 +172,6 @@ def compute_slay_metrics(
         case "autoencoder":
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            spike_snippets, unit_ids = extract_spike_snippets(
-                sorting_analyzer, autoencoder_params
-            )
-
             if (
                 not retrain_autoencoder
                 and model_path is not None
@@ -183,8 +179,11 @@ def compute_slay_metrics(
             ):
                 autoencoder = autoencoder_architecture().to(device)
                 autoencoder.load_state_dict(torch.load(model_path, map_location=device))
-                spike_dataset = SpikeDataset(spike_snippets, unit_ids)
+                spike_dataset = None
             else:
+                spike_snippets, unit_ids = extract_spike_snippets(
+                    sorting_analyzer, autoencoder_params
+                )
                 autoencoder, spike_dataset = autoencoder_train_fn(
                     spike_snippets, unit_ids
                 )
@@ -193,7 +192,7 @@ def compute_slay_metrics(
 
             autoencoder.eval()
             similarity = compute_autoencoder_similarity(
-                sorting_analyzer, spike_dataset, autoencoder
+                sorting_analyzer, autoencoder, autoencoder_params, spike_dataset
             )
 
         case "l2":

@@ -64,15 +64,24 @@ def make_artificial_splits(
             uid for uid in splittable_ids if uid not in list(split_indices.keys())
         ]
 
-    split_ids = {}
+    splits = {}
     new_id = max(sorting_analyzer.unit_ids) + 1
     for original_id in all_split_indices.keys():
-        split_ids[int(original_id)] = [int(new_id), int(new_id) + 1]
+        splits[int(original_id)] = [
+            int(new_id),
+            int(new_id) + 1,
+            all_split_indices[int(original_id)][2],
+        ]
         new_id += 2
 
-    split_analyzer = sorting_analyzer.split_units(all_split_indices)
+    split_analyzer = sorting_analyzer.split_units(
+        {key: [value[0], value[1]] for key, value in all_split_indices.items()}
+    )
 
-    return split_analyzer, split_ids
+    split_ids = {key: [value[0], value[1]] for key, value in splits.items()}
+    split_types = {key: value[2] for key, value in splits.items()}
+
+    return split_analyzer, split_ids, split_types
 
 
 def get_drift_splits(
@@ -176,7 +185,7 @@ def get_drift_splits(
         unsplit_spike_idxs = np.setdiff1d(
             np.arange(unit_spike_idxs.shape[0]), split_spike_idxs
         )
-        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs]
+        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs, "drift"]
 
     return split_indices
 
@@ -259,7 +268,7 @@ def get_amplitude_splits(
         unsplit_spike_idxs = np.setdiff1d(
             np.arange(unit_spike_idxs.shape[0]), split_spike_idxs
         )
-        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs]
+        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs, "amplitude"]
 
     return split_indices
 
@@ -340,7 +349,7 @@ def get_burst_splits(
         unsplit_spike_idxs = np.setdiff1d(
             np.arange(unit_spike_idxs.shape[0]), split_spike_idxs
         )
-        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs]
+        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs, "burst"]
 
     return split_indices
 
@@ -411,7 +420,7 @@ def get_random_splits(
         unsplit_spike_idxs = np.setdiff1d(
             np.arange(unit_spike_idxs.shape[0]), split_spike_idxs
         )
-        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs]
+        split_indices[unit_id] = [unsplit_spike_idxs, split_spike_idxs, "random"]
 
     return split_indices
 

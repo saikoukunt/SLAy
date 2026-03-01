@@ -3,6 +3,8 @@ from numpy.typing import NDArray
 from scipy.signal import butter, find_peaks_cwt, sosfiltfilt
 from scipy.stats import poisson, wasserstein_distance
 from spikeinterface.core import SortingAnalyzer
+from tqdm import tqdm
+from joblib import Parallel, delayed
 
 
 def compute_final_metric(
@@ -67,13 +69,21 @@ def compute_ccg_metric(
     """
     unit_ids = sorting_analyzer.unit_ids
     ccg_metric = np.zeros((len(unit_ids), len(unit_ids)))
-
-    for unit_index_i, unit_index_j in np.argwhere(pair_mask):
-        ccg = ccgs[unit_index_i, unit_index_j, :]
-        ccg_metric[unit_index_i, unit_index_j] = _compute_ccg_metric_pair(
-            ccg, bin_size_ms / 1000, min_ccg_rate=1000
-        )
-        ccg_metric[unit_index_j, unit_index_i] = ccg_metric[unit_index_i, unit_index_j]
+    
+    pairs = np.argwhere(pair_mask)
+    bin_size_s = bin_size_ms / 1000
+    
+    def compute_pair(i, j):
+        return i, j, _compute_ccg_metric_pair(ccgs[i, j, :], bin_size_s, min_ccg_rate=1000)
+    
+    results = Parallel(n_jobs=-1)(
+        delayed(compute_pair)(i, j) for i, j in tqdm(pairs, desc="Calculating CCG significance")
+    )
+    
+    for i, j, metric in results:
+        ccg_metric[i, j] = metric
+        ccg_metric[j, i] = metric
+    
     return ccg_metric
 
 
@@ -107,14 +117,19 @@ def compute_refractory_penalty(
     """
     unit_ids = sorting_analyzer.unit_ids
     refractory_penalty = np.zeros((len(unit_ids), len(unit_ids)))
-    for unit_index_i, unit_index_j in np.argwhere(pair_mask):
-        ccg = ccgs[unit_index_i, unit_index_j, :]
-        refractory_penalty[unit_index_i, unit_index_j] = _sliding_RP_viol_pair(
-            ccg, bin_size_ms, maximum_contamination
-        )
-        refractory_penalty[unit_index_j, unit_index_i] = refractory_penalty[
-            unit_index_i, unit_index_j
-        ]
+    
+    pairs = np.argwhere(pair_mask)
+    
+    def compute_pair(i, j):
+        return i, j, _sliding_RP_viol_pair(ccgs[i, j, :], bin_size_ms, maximum_contamination)
+    
+    results = Parallel(n_jobs=-1)(
+        delayed(compute_pair)(i, j) for i, j in tqdm(pairs, desc="Calculating refractory penalty")
+    )
+    
+    for i, j, penalty in results:
+        refractory_penalty[i, j] = penalty
+        refractory_penalty[j, i] = penalty
 
     return refractory_penalty
 

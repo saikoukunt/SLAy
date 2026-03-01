@@ -1,7 +1,6 @@
 from typing import Any
 
 import numpy as np
-import torch
 from numpy.typing import NDArray
 from spikeinterface.core import SortingAnalyzer
 from torch import nn
@@ -15,8 +14,7 @@ from .autoencoder import (
 from .metrics import (
     compute_final_metric,
 )
-
-from kneed import KneeLocator
+from tqdm import tqdm
 
 
 def autoselect_merge_parameters(
@@ -39,7 +37,7 @@ def autoselect_merge_parameters(
     random_seed=0,
 ):
     # compute metric for an analyzer with artificial splits
-    split_analyzer, split_pairs = make_artificial_splits(
+    split_analyzer, split_ids, split_types = make_artificial_splits(
         sorting_analyzer, splitting_probability, random_seed=random_seed
     )
 
@@ -59,7 +57,8 @@ def autoselect_merge_parameters(
     parameter_combinations, percents_merged, recalls = compute_parameter_performances(
         parameter_combinations,
         split_analyzer,
-        list(split_pairs.values()),
+        list(split_ids.values()),
+        list(split_types.values()),
         similarity,
         ccg_metric,
         refractory_penalty,
@@ -72,13 +71,20 @@ def autoselect_merge_parameters(
         recalls[pareto_indices],
     )
 
-    return autoselected_parameters, parameter_combinations, split_analyzer, split_pairs
+    return (
+        autoselected_parameters,
+        parameter_combinations,
+        split_analyzer,
+        split_ids,
+        split_types,
+    )
 
 
 def compute_parameter_performances(
     parameter_combinations,
     split_analyzer,
     split_pairs,
+    splits,
     similarity,
     ccg_metric,
     refractory_penalty,
@@ -86,7 +92,9 @@ def compute_parameter_performances(
     if parameter_combinations is None:
         parameter_combinations = generate_parameter_combinations()
 
-    for i, parameters in enumerate(parameter_combinations):
+    for i, parameters in enumerate(
+        tqdm(parameter_combinations, desc="Sweeping parameters")
+    ):
         final_metric = compute_final_metric(
             similarity, ccg_metric, refractory_penalty, parameters
         )
@@ -94,7 +102,7 @@ def compute_parameter_performances(
             split_analyzer, final_metric, parameters["merge_threshold"]
         )
         percent_merged, recall, _, _ = evaluate_merge_predictions(
-            merges, split_pairs, len(split_analyzer.unit_ids)
+            merges, split_pairs, splits, len(split_analyzer.unit_ids)
         )
 
         parameter_combinations[i]["percent_merged"] = percent_merged
@@ -108,7 +116,7 @@ def compute_parameter_performances(
     return parameter_combinations, percents_merged, recalls
 
 
-def evaluate_merge_predictions(predicted_merges, true_pairs, num_units):
+def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_units):
     merge_partners = {}
     for merge in predicted_merges:
         for unit_id in merge:
@@ -120,7 +128,7 @@ def evaluate_merge_predictions(predicted_merges, true_pairs, num_units):
     tp_merges = []
     fn_merges = []
 
-    for pair in true_pairs:
+    for pair in true_splits:
         if pair[0] not in merge_partners or pair[1] not in merge_partners[pair[0]]:
             num_fn += 1
             fn_merges.append([pair[0], pair[1]])
@@ -129,7 +137,7 @@ def evaluate_merge_predictions(predicted_merges, true_pairs, num_units):
             tp_merges.append([pair[0]] + merge_partners[pair[0]])
 
     percent_merged = sum([len(merge) for merge in predicted_merges]) / num_units
-    recall = num_tp / len(true_pairs)
+    recall = num_tp / len(true_splits)
 
     return percent_merged, recall, tp_merges, fn_merges
 
