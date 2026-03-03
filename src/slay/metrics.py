@@ -69,21 +69,26 @@ def compute_ccg_metric(
     """
     unit_ids = sorting_analyzer.unit_ids
     ccg_metric = np.zeros((len(unit_ids), len(unit_ids)))
-    
+
     pairs = np.argwhere(pair_mask)
     bin_size_s = bin_size_ms / 1000
-    
+
     def compute_pair(i, j):
-        return i, j, _compute_ccg_metric_pair(ccgs[i, j, :], bin_size_s, min_ccg_rate=1000)
-    
+        return (
+            i,
+            j,
+            _compute_ccg_metric_pair(ccgs[i, j, :], bin_size_s, min_ccg_rate=1000),
+        )
+
     results = Parallel(n_jobs=-1)(
-        delayed(compute_pair)(i, j) for i, j in tqdm(pairs, desc="Calculating CCG significance")
+        delayed(compute_pair)(i, j)
+        for i, j in tqdm(pairs, desc="Calculating CCG significance")
     )
-    
+
     for i, j, metric in results:
         ccg_metric[i, j] = metric
         ccg_metric[j, i] = metric
-    
+
     return ccg_metric
 
 
@@ -117,16 +122,21 @@ def compute_refractory_penalty(
     """
     unit_ids = sorting_analyzer.unit_ids
     refractory_penalty = np.zeros((len(unit_ids), len(unit_ids)))
-    
+
     pairs = np.argwhere(pair_mask)
-    
+
     def compute_pair(i, j):
-        return i, j, _sliding_RP_viol_pair(ccgs[i, j, :], bin_size_ms, maximum_contamination)
-    
+        return (
+            i,
+            j,
+            _sliding_RP_viol_pair(ccgs[i, j, :], bin_size_ms, maximum_contamination),
+        )
+
     results = Parallel(n_jobs=-1)(
-        delayed(compute_pair)(i, j) for i, j in tqdm(pairs, desc="Calculating refractory penalty")
+        delayed(compute_pair)(i, j)
+        for i, j in tqdm(pairs, desc="Calculating refractory penalty")
     )
-    
+
     for i, j, penalty in results:
         refractory_penalty[i, j] = penalty
         refractory_penalty[j, i] = penalty
