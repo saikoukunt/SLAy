@@ -9,7 +9,7 @@ from .algorithm import find_merges, compute_slay_metrics
 from .artificial_splits import make_artificial_splits
 from .autoencoder import (
     CN_AE,
-    train_ae,
+    train_autoencoder,
 )
 from .metrics import (
     compute_final_metric,
@@ -45,7 +45,7 @@ def autoselect_merge_parameters(
         split_analyzer,
         autoencoder_params,
         CN_AE,
-        train_ae,
+        train_autoencoder,
         similarity_threshold,
         False,
         model_path,
