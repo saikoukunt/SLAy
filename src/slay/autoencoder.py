@@ -5,10 +5,13 @@ import scipy.spatial.distance as dist
 import torch
 import torch.nn as nn
 from numpy.typing import NDArray
+from scipy.sparse import lil_array
+from scipy.sparse.csgraph import dijkstra
 from sklearn.model_selection import train_test_split
+from sklearn.neighbors import NearestNeighbors
 from spikeinterface.core import SortingAnalyzer, get_template_extremum_channel
 from spikeinterface.postprocessing import compute_template_similarity
-from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 
 from .utils import get_channels_by_distance
@@ -285,7 +288,87 @@ class CN_AE(nn.Module):
         return out, z
 
 
-def train_ae(
+def train_geometric_autoencoder(
+    spikes: torch.Tensor,
+    labels: NDArray[np.int_],
+    n_filt: int = 256,
+    num_epochs: int = 25,
+    zDim: int = 15,
+    lr: float = 1e-4,
+    model=None,
+    batch_size: int = 128,
+    return_inds=False,
+    verbose=True,
+    prox_coef=0.1,
+):
+    device, train_dataset, train_indices, test_indices, train_loader, test_loader = (
+        _create_dataloaders(spikes, labels, batch_size)
+    )
+
+    rng = np.random.default_rng()
+    n_landmarks = min(100, len(train_dataset))
+    landmark_indices = rng.choice(len(train_dataset), n_landmarks, replace=False)
+    landmark_spikes = train_dataset.spikes[landmark_indices].to(device)
+    distances = _calculate_isomap_distances(train_dataset.spikes, landmark_indices).to(
+        device
+    )
+
+    net = (
+        model
+        if model
+        else CN_AE(zDim=zDim, n_filt=n_filt, num_samp=spikes.shape[-1]).to(device)
+    )
+    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+
+    for epoch in tqdm(range(num_epochs), desc="Epoch"):
+        net.train()
+        running_mse = 0
+        running_prox_loss = 0
+
+        for spks, _, indices in tqdm(train_loader, desc="Training", leave=False):
+            spks = spks.to(device)
+
+            out, z_batch = net(spks)
+            _, z_landmarks = net(landmark_spikes)
+            mse, prox = _isomap_ae_loss(
+                spks, out, distances, indices, z_landmarks, z_batch
+            )
+            loss = mse + prox_coef * prox
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            running_mse += mse.item()
+            running_prox_loss += prox.item()
+
+        average_mse = running_mse / len(train_loader)
+        average_prox = running_prox_loss / len(train_loader)
+
+        net.eval()
+        running_test_mse = 0
+        with torch.no_grad():
+            for spks, _, indices in tqdm(test_loader, desc="Testing", leave=False):
+                spks = spks.to(device)
+
+                out, _ = net(spks)
+                mse = torch.nn.functional.mse_loss(out, spks)
+                running_test_mse += mse.item()
+
+        average_test_mse = running_test_mse / len(test_loader)
+
+        if verbose:
+            tqdm.write(
+                f"Epoch {epoch + 1:2d}/{num_epochs} | Train MSE: {average_mse:.4f} | Train Geometric Loss: {average_prox:.4f} | Test MSE: {average_test_mse:.4f}"
+            )
+
+    if return_inds:
+        return net, train_dataset, test_indices
+    else:
+        return net, train_dataset
+
+
+def train_autoencoder(
     spikes: torch.Tensor,
     cl_ids: NDArray[np.int_],
     n_filt: int = 256,
@@ -321,39 +404,9 @@ def train_ae(
         net (CN_AE): The trained network.
         spk_data (SpikeDataset): Dataset containing snippets used for training.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Construct cluster-balanced dataloaders
-    spk_data = SpikeDataset(spikes, cl_ids)
-    labels = cl_ids
-
-    train_indices, test_indices, _, _ = train_test_split(
-        np.arange(len(spk_data)),
-        labels,
-        stratify=labels,
-        test_size=0.2,
-        random_state=42,
+    device, spk_data, train_indices, test_indices, train_loader, test_loader = (
+        _create_dataloaders(spikes, cl_ids, batch_size)
     )
-    train_labels, train_counts = np.unique(labels[train_indices], return_counts=True)
-    test_labels, test_counts = np.unique(labels[test_indices], return_counts=True)
-
-    label_to_train_count = dict(zip(train_labels, train_counts))
-    label_to_test_count = dict(zip(test_labels, test_counts))
-
-    train_weights = [1 / label_to_train_count[label] for label in labels[train_indices]]
-    test_weights = [1 / label_to_test_count[label] for label in labels[test_indices]]
-    train_split = Subset(spk_data, train_indices)
-    test_split = Subset(spk_data, test_indices)
-    sampler = WeightedRandomSampler(
-        weights=train_weights, num_samples=len(train_split), replacement=True
-    )
-    test_sampler = WeightedRandomSampler(
-        weights=test_weights, num_samples=len(test_split), replacement=True
-    )
-
-    BATCH_SIZE = batch_size
-    train_loader = DataLoader(train_split, batch_size=BATCH_SIZE, sampler=sampler)
-    test_loader = DataLoader(test_split, batch_size=BATCH_SIZE, sampler=test_sampler)
 
     net = (
         model
@@ -362,12 +415,10 @@ def train_ae(
     )
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
 
-    # TRAIN/TEST LOOP
     for epoch in tqdm(range(num_epochs), desc="Epoch"):
         net.train()
         running_mse = 0
 
-        # TRAINING ITERATION
         for spks, _, _ in tqdm(train_loader, desc="Training", leave=False):
             spks = spks.to(device)
 
@@ -380,23 +431,22 @@ def train_ae(
 
             running_mse += loss.item()
 
-        avg_train_mse = running_mse / len(train_loader)
+        average_mse = running_mse / len(train_loader)
 
-        # TESTING ITERATION
         net.eval()
-        running_tloss = 0
+        running_test_mse = 0
         with torch.no_grad():
             for spks, _, _ in tqdm(test_loader, desc="Testing", leave=False):
                 spks = spks.to(device)
 
                 out, _ = net(spks)
-                tloss = torch.nn.functional.mse_loss(out, spks)
-                running_tloss += tloss.item()
+                mse = torch.nn.functional.mse_loss(out, spks)
+                running_test_mse += mse.item()
 
-        avg_test_loss = running_tloss / len(test_loader)
+        average_test_mse = running_test_mse / len(test_loader)
         if verbose:
             tqdm.write(
-                f"Epoch {epoch + 1:2d}/{num_epochs} | Train MSE: {avg_train_mse:.4f} | Test MSE: {avg_test_loss:.4f}"
+                f"Epoch {epoch + 1:2d}/{num_epochs} | Train MSE: {average_mse:.4f} | Test MSE: {average_test_mse:.4f}"
             )
 
     if return_inds:
@@ -528,3 +578,75 @@ def compute_autoencoder_similarity(
             autoencoder_similarity[j, i] = autoencoder_similarity[i, j]
 
     return autoencoder_similarity
+
+
+def _calculate_isomap_distances(spikes, landmark_inds, n_neighbors=100):
+    spikes = spikes.detach().cpu().numpy()
+    spikes = spikes.reshape(spikes.shape[0], -1)
+
+    neigh = NearestNeighbors(n_neighbors=n_neighbors, metric="euclidean").fit(spikes)
+    pair_dists, neighbors = neigh.kneighbors(spikes, return_distance=True)  # type: ignore
+    neighbors = neighbors[:, 1:]
+    pair_dists = pair_dists[:, 1:]
+
+    graph = lil_array((pair_dists.shape[0], pair_dists.shape[0]))
+    for i in range(pair_dists.shape[0]):
+        graph[i, neighbors[i]] = pair_dists[i, :]
+
+    dists = dijkstra(graph, indices=landmark_inds, directed=False, unweighted=False)
+
+    return torch.Tensor(dists)
+
+
+def _isomap_ae_loss(
+    target,
+    out,
+    dists,
+    batch_inds,
+    z_landmarks,
+    z_batch,
+):
+    dists = dists[:, batch_inds]
+    prox = torch.linalg.norm(
+        dists - torch.cdist(z_landmarks, z_batch), "fro"
+    ) / np.sqrt(dists.shape[0] * dists.shape[1])
+
+    mse = torch.nn.functional.mse_loss(target, out, reduction="mean")
+
+    return mse, prox
+
+
+def _create_dataloaders(spikes, cl_ids, batch_size):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    labels = cl_ids
+
+    train_indices, test_indices, _, _ = train_test_split(
+        np.arange(len(spikes)),
+        labels,
+        stratify=labels,
+        test_size=0.2,
+        random_state=42,
+    )
+    train_labels, train_counts = np.unique(labels[train_indices], return_counts=True)
+    test_labels, test_counts = np.unique(labels[test_indices], return_counts=True)
+
+    label_to_train_count = dict(zip(train_labels, train_counts))
+    label_to_test_count = dict(zip(test_labels, test_counts))
+
+    train_weights = [1 / label_to_train_count[label] for label in labels[train_indices]]
+    test_weights = [1 / label_to_test_count[label] for label in labels[test_indices]]
+
+    train_dataset = SpikeDataset(spikes[train_indices], labels[train_indices])
+    test_dataset = SpikeDataset(spikes[test_indices], labels[test_indices])
+
+    sampler = WeightedRandomSampler(
+        weights=train_weights, num_samples=len(train_indices), replacement=True
+    )
+    test_sampler = WeightedRandomSampler(
+        weights=test_weights, num_samples=len(test_indices), replacement=True
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler)
+    return device, train_dataset, train_indices, test_indices, train_loader, test_loader

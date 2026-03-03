@@ -11,7 +11,7 @@ from slay.autoencoder import (
     SpikeDataset,
     compute_autoencoder_similarity,
     extract_spike_snippets,
-    train_ae,
+    train_autoencoder,
 )
 from slay.bursts import base_algo, find_bursts
 from slay.metrics import (
