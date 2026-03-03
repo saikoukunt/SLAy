@@ -129,7 +129,7 @@ def extract_spike_snippets(
                 start_frame=start_frame,
                 end_frame=end_frame,
                 channel_ids=desired_channels,
-                return_in_uV=True,
+                return_in_uV=False,
             ).T
 
         # Store unit labels and waveforms
@@ -291,7 +291,7 @@ def train_ae(
     n_filt: int = 256,
     num_epochs: int = 25,
     zDim: int = 15,
-    lr: float = 1e-3,
+    lr: float = 1e-4,
     model=None,
     batch_size: int = 128,
     return_inds=False,
@@ -407,8 +407,11 @@ def train_ae(
 
 def compute_autoencoder_similarity(
     sorting_analyzer: SortingAnalyzer,
-    spike_dataset: SpikeDataset,
     autoencoder: nn.Module,
+    autoencoder_params: dict[str, Any] = {
+        "num_chan": 8,
+    },
+    spike_dataset: SpikeDataset = None,
     zDim: int = 15,
 ) -> NDArray[np.float64]:
     """
@@ -426,6 +429,12 @@ def compute_autoencoder_similarity(
             (# units, # units). ae_sim[i,j] = 1 indicates maximal similarity.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if spike_dataset is None:
+        spike_snippets, unit_ids = extract_spike_snippets(
+            sorting_analyzer, autoencoder_params
+        )
+        spike_dataset = SpikeDataset(spike_snippets, unit_ids)
 
     # Get templates and peak channels from sorting analyzer
     templates_ext = sorting_analyzer.get_extension("templates")
@@ -513,9 +522,9 @@ def compute_autoencoder_similarity(
                     / amplitudes[j, unit_j_peak_chan]
                 )
 
-            decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
+            # decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
 
-            autoencoder_similarity[i, j] *= decay_pen
+            autoencoder_similarity[i, j] *= decay_pen_raw
             autoencoder_similarity[j, i] = autoencoder_similarity[i, j]
 
     return autoencoder_similarity
