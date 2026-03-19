@@ -7,7 +7,7 @@ from slay.artificial_splits import (
     get_random_splits,
 )
 from slay.autoencoder import (
-    CN_AE,
+    AE,
     SpikeDataset,
     compute_autoencoder_similarity,
     extract_spike_snippets,
