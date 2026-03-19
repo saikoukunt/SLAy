@@ -10,7 +10,6 @@ from scipy.sparse.csgraph import dijkstra
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import NearestNeighbors
 from spikeinterface.core import SortingAnalyzer, get_template_extremum_channel
-from spikeinterface.postprocessing import compute_template_similarity
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
 
@@ -102,9 +101,7 @@ def extract_spike_snippets(
     spikes = np.zeros(
         (
             num_snippets,
-            1,
-            autoencoder_params["num_chan"],
-            num_samples,
+            autoencoder_params["num_chan"] * num_samples,
         ),
         dtype=np.float32,
     )
@@ -121,7 +118,7 @@ def extract_spike_snippets(
 
         # Extract waveforms for all spikes
         snippets = np.zeros(
-            (n_spikes_unit, autoencoder_params["num_chan"], num_samples)
+            (n_spikes_unit, autoencoder_params["num_chan"] * num_samples)
         )
 
         for i, spike_time in enumerate(spike_times):
@@ -132,12 +129,17 @@ def extract_spike_snippets(
                 start_frame=start_frame,
                 end_frame=end_frame,
                 channel_ids=desired_channels,
-                return_in_uV=False,
-            ).T
+                return_in_uV=True,
+            ).flatten()
+
+        # Remove amplitude information
+        amplitudes = np.abs(snippets).max(axis=1, keepdims=True)
+        amplitudes = np.where(amplitudes > 1.0, amplitudes, 1.0)
+        snippets /= amplitudes
 
         # Store unit labels and waveforms
         spike_labels[snip_idx : snip_idx + n_spikes_unit] = unit_idx
-        spikes[snip_idx : snip_idx + n_spikes_unit, 0, :, :] = snippets
+        spikes[snip_idx : snip_idx + n_spikes_unit, :] = snippets
 
         snip_idx += n_spikes_unit
 
@@ -180,106 +182,37 @@ class SpikeDataset(Dataset):
         return spk, label, idx
 
 
-class CN_AE(nn.Module):
-    """
-    A convolutional autoencoder for spike snippet feature extraction.
-
-    This model consists of three convolutional layers with pooling operations in the encoder,
-    followed by a fully connected layer as the bottleneck, and then three convolutional transpose
-    layers with upsampling operations in the decoder. Each layer is followed by a ReLU activation
-    except the output layer.
-
-    Attributes:
-        num_chan (int): number of channels in snippets
-        num_samp (int): number of timepoints per channel in snippets
-        n_filt (int): number of convolutional filters in the bottleneck
-        half_filt (int): number of filters for the second convolutional layer in the encoder
-        qrt_filt (int): number of filters for the first convolutional layer in the encoder
-        featureDim: number of features in the input to the fully connected bottleneck
-    """
-
+class AE(nn.Module):
     def __init__(
         self,
-        imgChannels: int = 1,
-        n_filt: int = 256,
         zDim: int = 15,
         num_chan: int = 8,
         num_samp: int = 40,
-    ) -> None:
-        super(CN_AE, self).__init__()
-        self.num_chan = num_chan
-        self.num_samp = num_samp
-        self.n_filt = n_filt
-        self.half_filt = n_filt // 2
-        self.qrt_filt = n_filt // 4
-        self.featureDim = (n_filt * num_chan // 8) * (num_samp // 8)
+        n_units_l1: int = 600,
+        n_units_l2: int = 300,
+    ):
+        super(AE, self).__init__()
+        self.encoder = nn.Sequential()
+        self.decoder = nn.Sequential()
 
-        self.encoder_conv = nn.Sequential()
+        self.encoder.append(nn.Linear(num_chan * num_samp, n_units_l1))
+        self.encoder.append(nn.GELU())
+        self.encoder.append(nn.Linear(n_units_l1, n_units_l2))
+        self.encoder.append(nn.GELU())
+        self.encoder.append(nn.Linear(n_units_l2, zDim))
+        self.encoder.append(nn.GELU())
 
-        self.encoder_conv.append(
-            nn.Conv2d(imgChannels, self.qrt_filt, kernel_size=3, padding="same")
-        )
-        self.encoder_conv.append(nn.BatchNorm2d(self.qrt_filt))
-        self.encoder_conv.append(nn.ReLU())
-        self.encoder_conv.append(nn.MaxPool2d(kernel_size=2))
-
-        self.encoder_conv.append(
-            nn.Conv2d(self.qrt_filt, self.half_filt, kernel_size=3, padding="same")
-        )
-        self.encoder_conv.append(nn.BatchNorm2d(self.half_filt))
-        self.encoder_conv.append(nn.ReLU())
-        self.encoder_conv.append(nn.MaxPool2d(kernel_size=2))
-
-        self.encoder_conv.append(
-            nn.Conv2d(self.half_filt, n_filt, kernel_size=3, padding="same")
-        )
-        self.encoder_conv.append(nn.BatchNorm2d(n_filt))
-        self.encoder_conv.append(nn.ReLU())
-        self.encoder_conv.append(nn.MaxPool2d(kernel_size=2))
-
-        self.encoder_fc = nn.Sequential()
-        self.encoder_fc.append(nn.Linear(self.featureDim, zDim))
-        self.encoder_fc.append(nn.ReLU())
-
-        self.decoder_fc = nn.Sequential()
-        self.decoder_fc.append(nn.Linear(zDim, self.featureDim))
-
-        self.decoder_conv = nn.Sequential()
-        self.decoder_conv.append(nn.BatchNorm2d(n_filt))
-        self.decoder_conv.append(nn.ReLU())
-
-        self.decoder_conv.append(nn.Upsample(size=(num_chan // 4, num_samp // 4)))
-        self.decoder_conv.append(
-            nn.ConvTranspose2d(n_filt, self.half_filt, kernel_size=3, padding=1)
-        )
-        self.decoder_conv.append(nn.BatchNorm2d(self.half_filt))
-        self.decoder_conv.append(nn.ReLU())
-
-        self.decoder_conv.append(nn.Upsample(size=(num_chan // 2, num_samp // 2)))
-        self.decoder_conv.append(
-            nn.ConvTranspose2d(self.half_filt, self.qrt_filt, kernel_size=3, padding=1)
-        )
-        self.decoder_conv.append(nn.BatchNorm2d(self.qrt_filt))
-        self.decoder_conv.append(nn.ReLU())
-
-        self.decoder_conv.append(nn.Upsample(size=(num_chan, num_samp)))
-        self.decoder_conv.append(
-            nn.ConvTranspose2d(self.qrt_filt, imgChannels, kernel_size=3, padding=1)
-        )
+        self.decoder.append(nn.Linear(zDim, n_units_l2))
+        self.decoder.append(nn.GELU())
+        self.decoder.append(nn.Linear(n_units_l2, n_units_l1))
+        self.decoder.append(nn.GELU())
+        self.decoder.append(nn.Linear(n_units_l1, num_chan * num_samp))
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.encoder_conv(x)
-        x = x.view(-1, self.featureDim)
-        x = self.encoder_fc(x)
-
-        return x
+        return self.encoder(x)
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        x = self.decoder_fc(z)
-        x = x.view(-1, self.n_filt, self.num_chan // 8, self.num_samp // 8)
-        x = self.decoder_conv(x)
-
-        return x
+        return self.decoder(z)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         z: torch.Tensor = self.encode(x)
@@ -288,94 +221,12 @@ class CN_AE(nn.Module):
         return out, z
 
 
-def train_geometric_autoencoder(
-    spikes: torch.Tensor,
-    labels: NDArray[np.int_],
-    n_filt: int = 256,
-    num_epochs: int = 25,
-    zDim: int = 15,
-    lr: float = 1e-4,
-    model=None,
-    batch_size: int = 128,
-    return_inds=False,
-    verbose=True,
-    prox_coef=0.1,
-):
-    device, train_dataset, train_indices, test_indices, train_loader, test_loader = (
-        _create_dataloaders(spikes, labels, batch_size)
-    )
-
-    rng = np.random.default_rng()
-    n_landmarks = min(100, len(train_dataset))
-    landmark_indices = rng.choice(len(train_dataset), n_landmarks, replace=False)
-    landmark_spikes = train_dataset.spikes[landmark_indices].to(device)
-    distances = _calculate_isomap_distances(train_dataset.spikes, landmark_indices).to(
-        device
-    )
-
-    net = (
-        model
-        if model
-        else CN_AE(zDim=zDim, n_filt=n_filt, num_samp=spikes.shape[-1]).to(device)
-    )
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-
-    for epoch in tqdm(range(num_epochs), desc="Epoch"):
-        net.train()
-        running_mse = 0
-        running_prox_loss = 0
-
-        for spks, _, indices in tqdm(train_loader, desc="Training", leave=False):
-            spks = spks.to(device)
-
-            out, z_batch = net(spks)
-            _, z_landmarks = net(landmark_spikes)
-            mse, prox = _isomap_ae_loss(
-                spks, out, distances, indices, z_landmarks, z_batch
-            )
-            loss = mse + prox_coef * prox
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            running_mse += mse.item()
-            running_prox_loss += prox.item()
-
-        average_mse = running_mse / len(train_loader)
-        average_prox = running_prox_loss / len(train_loader)
-
-        net.eval()
-        running_test_mse = 0
-        with torch.no_grad():
-            for spks, _, indices in tqdm(test_loader, desc="Testing", leave=False):
-                spks = spks.to(device)
-
-                out, _ = net(spks)
-                mse = torch.nn.functional.mse_loss(out, spks)
-                running_test_mse += mse.item()
-
-        average_test_mse = running_test_mse / len(test_loader)
-
-        if verbose:
-            tqdm.write(
-                f"Epoch {epoch + 1:2d}/{num_epochs} | Train MSE: {average_mse:.4f} | Train Geometric Loss: {average_prox:.4f} | Test MSE: {average_test_mse:.4f}"
-            )
-
-    if return_inds:
-        return net, train_dataset, test_indices
-    else:
-        return net, train_dataset
-
-
 def train_autoencoder(
     spikes: torch.Tensor,
     cl_ids: NDArray[np.int_],
-    n_filt: int = 256,
+    model: nn.Module,
     num_epochs: int = 25,
-    zDim: int = 15,
     lr: float = 1e-4,
-    model=None,
     batch_size: int = 128,
     return_inds=False,
     verbose=True,
@@ -408,21 +259,16 @@ def train_autoencoder(
         _create_dataloaders(spikes, cl_ids, batch_size)
     )
 
-    net = (
-        model
-        if model
-        else CN_AE(zDim=zDim, n_filt=n_filt, num_samp=spikes.shape[-1]).to(device)
-    )
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     for epoch in tqdm(range(num_epochs), desc="Epoch"):
-        net.train()
+        model.train()
         running_mse = 0
 
         for spks, _, _ in tqdm(train_loader, desc="Training", leave=False):
             spks = spks.to(device)
 
-            out, z_batch = net(spks)
+            out, z_batch = model(spks)
             loss = torch.nn.functional.mse_loss(out, spks)
 
             optimizer.zero_grad()
@@ -433,13 +279,13 @@ def train_autoencoder(
 
         average_mse = running_mse / len(train_loader)
 
-        net.eval()
+        model.eval()
         running_test_mse = 0
         with torch.no_grad():
             for spks, _, _ in tqdm(test_loader, desc="Testing", leave=False):
                 spks = spks.to(device)
 
-                out, _ = net(spks)
+                out, _ = model(spks)
                 mse = torch.nn.functional.mse_loss(out, spks)
                 running_test_mse += mse.item()
 
@@ -450,9 +296,9 @@ def train_autoencoder(
             )
 
     if return_inds:
-        return net, spk_data, test_indices
+        return model, spk_data, test_indices
     else:
-        return net, spk_data
+        return model, spk_data
 
 
 def compute_autoencoder_similarity(
@@ -524,23 +370,21 @@ def compute_autoencoder_similarity(
 
     # Calculate cluster centroids (mean latent representation for each unit)
     unit_centroids = np.zeros((n_units, zDim))
+    unit_spreads = np.zeros(n_units)
     for unit_idx in range(n_units):
         unit_mask = spike_labels == unit_idx
         if np.sum(unit_mask) > 0:
             unit_centroids[unit_idx] = np.mean(spike_latents[unit_mask], axis=0)
+        if np.sum(unit_mask) > 0:
+            diffs = spike_latents[unit_mask] - unit_centroids[unit_idx]
+            unit_spreads[unit_idx] = np.mean(np.sqrt(np.sum(diffs**2, axis=1)))
 
     # Calculate pairwise euclidean distances between unit centroids
     centroid_distances = dist.squareform(dist.pdist(unit_centroids, "euclidean"))
 
-    # Calibrate similarity threshold to 0.6 template cosine similarity
-    template_similarity = compute_template_similarity(
-        sorting_analyzer, method="cosine", save=False
-    )
-    ref_inds = np.argsort(np.abs(template_similarity.flatten() - 0.6))[-10:]
-    ref_dist = np.mean(centroid_distances.flatten()[ref_inds])
-
     # Calculate similarity -- ref_dist is scaled to 0.6 similarity
-    autoencoder_similarity = np.exp(-0.5 * centroid_distances / ref_dist)
+    ref_dists = unit_spreads[:, None] + unit_spreads[None, :]
+    autoencoder_similarity = np.exp(-centroid_distances / ref_dists)
 
     # Zero out self-similarity
     np.fill_diagonal(autoencoder_similarity, 0)
@@ -578,42 +422,6 @@ def compute_autoencoder_similarity(
             autoencoder_similarity[j, i] = autoencoder_similarity[i, j]
 
     return autoencoder_similarity
-
-
-def _calculate_isomap_distances(spikes, landmark_inds, n_neighbors=100):
-    spikes = spikes.detach().cpu().numpy()
-    spikes = spikes.reshape(spikes.shape[0], -1)
-
-    neigh = NearestNeighbors(n_neighbors=n_neighbors, metric="euclidean").fit(spikes)
-    pair_dists, neighbors = neigh.kneighbors(spikes, return_distance=True)  # type: ignore
-    neighbors = neighbors[:, 1:]
-    pair_dists = pair_dists[:, 1:]
-
-    graph = lil_array((pair_dists.shape[0], pair_dists.shape[0]))
-    for i in range(pair_dists.shape[0]):
-        graph[i, neighbors[i]] = pair_dists[i, :]
-
-    dists = dijkstra(graph, indices=landmark_inds, directed=False, unweighted=False)
-
-    return torch.Tensor(dists)
-
-
-def _isomap_ae_loss(
-    target,
-    out,
-    dists,
-    batch_inds,
-    z_landmarks,
-    z_batch,
-):
-    dists = dists[:, batch_inds]
-    prox = torch.linalg.norm(
-        dists - torch.cdist(z_landmarks, z_batch), "fro"
-    ) / np.sqrt(dists.shape[0] * dists.shape[1])
-
-    mse = torch.nn.functional.mse_loss(target, out, reduction="mean")
-
-    return mse, prox
 
 
 def _create_dataloaders(spikes, cl_ids, batch_size):

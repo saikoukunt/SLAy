@@ -9,16 +9,15 @@ from spikeinterface.core import SortingAnalyzer
 from spikeinterface.postprocessing import compute_template_similarity
 
 from .autoencoder import (
-    CN_AE,
-    SpikeDataset,
-    extract_spike_snippets,
-    train_geometric_autoencoder,
+    AE,
     compute_autoencoder_similarity,
+    extract_spike_snippets,
+    train_autoencoder,
 )
 from .metrics import (
     compute_ccg_metric,
-    compute_refractory_penalty,
     compute_final_metric,
+    compute_refractory_penalty,
 )
 
 
@@ -26,18 +25,18 @@ def compute_slay_merges(
     sorting_analyzer: SortingAnalyzer,
     merge_parameters: Any = "auto",
     splitting_probability: float = 0.3,
-    max_distance: int = 60,
+    max_distance: int = 40,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
     },
-    autoencoder_architecture: type = CN_AE,
-    autoencoder_train_fn: Callable = train_geometric_autoencoder,
+    autoencoder_architecture: type = AE,
+    autoencoder_train_fn: Callable = train_autoencoder,
     similarity_threshold: float = 0.4,
     retrain_autoencoder: bool = False,
     model_path: str | None = None,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 0.5,
+        "bin_ms": 1.0,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -181,11 +180,12 @@ def compute_slay_metrics(
                 autoencoder.load_state_dict(torch.load(model_path, map_location=device))
                 spike_dataset = None
             else:
+                autoencoder = autoencoder_architecture().to(device)
                 spike_snippets, unit_ids = extract_spike_snippets(
                     sorting_analyzer, autoencoder_params
                 )
                 autoencoder, spike_dataset = autoencoder_train_fn(
-                    spike_snippets, unit_ids
+                    spike_snippets, unit_ids, autoencoder
                 )
                 if model_path is not None:
                     torch.save(autoencoder.state_dict(), model_path)

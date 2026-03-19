@@ -8,7 +8,7 @@ from torch import nn
 from .algorithm import find_merges, compute_slay_metrics
 from .artificial_splits import make_artificial_splits
 from .autoencoder import (
-    CN_AE,
+    AE,
     train_autoencoder,
 )
 from .metrics import (
@@ -44,7 +44,7 @@ def autoselect_merge_parameters(
     similarity, ccg_metric, refractory_penalty = compute_slay_metrics(
         split_analyzer,
         autoencoder_params,
-        CN_AE,
+        AE,
         train_autoencoder,
         similarity_threshold,
         False,
@@ -144,16 +144,15 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
 
 def generate_parameter_combinations(
     k1_values=np.arange(0.0, 0.55, 0.05),
-    k2_values=np.arange(0, 1.5, 0.25),
-    merge_threshold_values=np.arange(0.4, 0.8, 0.05),
+    k2=1,
+    merge_threshold_values=np.arange(0.0, 0.8, 0.05),
 ):
     parameter_combinations = []
     for k1 in k1_values:
-        for k2 in k2_values:
-            for merge_threshold in merge_threshold_values:
-                parameter_combinations.append(
-                    {"k1": k1, "k2": k2, "merge_threshold": merge_threshold}
-                )
+        for merge_threshold in merge_threshold_values:
+            parameter_combinations.append(
+                {"k1": k1, "k2": k2, "merge_threshold": merge_threshold}
+            )
 
     return parameter_combinations
 
