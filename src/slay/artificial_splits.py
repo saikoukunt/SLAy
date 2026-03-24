@@ -1,9 +1,10 @@
 import numpy as np
 from spikeinterface.core.sorting_tools import spike_vector_to_indices
 from spikeinterface.core import SortingAnalyzer
+from spikeinterface.qualitymetrics import compute_quality_metrics
+from slay.metrics import _sliding_RP_viol_pair
 
 
-# TODO delete some partners to get better testing for false positives
 def make_artificial_splits(
     sorting_analyzer: SortingAnalyzer,
     splitting_probability,
@@ -64,6 +65,24 @@ def make_artificial_splits(
             uid for uid in splittable_ids if uid not in list(split_indices.keys())
         ]
 
+    split_analyzer, split_ids, split_types = _create_splits(
+        sorting_analyzer, all_split_indices
+    )
+    invalid_splits = get_invalid_splits(
+        split_analyzer,
+        split_ids,
+        max(sorting_analyzer.unit_ids),
+    )
+    for id in invalid_splits:
+        del all_split_indices[id]
+    split_analyzer, split_ids, split_types = _create_splits(
+        sorting_analyzer, all_split_indices
+    )
+
+    return split_analyzer, split_ids, split_types
+
+
+def _create_splits(sorting_analyzer, all_split_indices):
     splits = {}
     new_id = max(sorting_analyzer.unit_ids) + 1
     for original_id in all_split_indices.keys():
@@ -77,11 +96,44 @@ def make_artificial_splits(
     split_analyzer = sorting_analyzer.split_units(
         {key: [value[0], value[1]] for key, value in all_split_indices.items()}
     )
-
     split_ids = {key: [value[0], value[1]] for key, value in splits.items()}
     split_types = {key: value[2] for key, value in splits.items()}
 
     return split_analyzer, split_ids, split_types
+
+
+def get_invalid_splits(split_analyzer, split_ids, max_id):
+    quality_metrics = compute_quality_metrics(
+        split_analyzer, metric_names=["snr", "firing_rate"]
+    )
+    ccg_ext = split_analyzer.get_extension("correlograms")
+    ccgs, ccg_bins = ccg_ext.get_data()
+    acgs = np.zeros((ccgs.shape[0], ccgs.shape[-1]))
+    for i in range(ccgs.shape[0]):
+        acgs[i] = ccgs[i, i, :]
+
+    smoothed_slid_rps = np.zeros(acgs.shape[0])
+    for i in range(acgs.shape[0]):
+        smoothed_slid_rps[i] = _sliding_RP_viol_pair(
+            acgs[i], bin_size_ms=np.diff(ccg_bins)[0]
+        )
+
+    split_quality_metrics = quality_metrics[quality_metrics.index > max_id]
+    max_index = list(split_analyzer.unit_ids).index(max_id + 1)
+    split_quality_metrics.insert(2, "sliding_rp_viol", smoothed_slid_rps[max_index:])
+
+    good_units = (
+        (split_quality_metrics["snr"] > 3)
+        & (split_quality_metrics["sliding_rp_viol"] < 0.1)
+        & (split_quality_metrics["firing_rate"] > 0.1)
+    )
+    good_units = set(split_quality_metrics[good_units].index)
+    good_splits = []
+    for original_id, new_ids in split_ids.items():
+        if new_ids[0] in good_units and new_ids[1] in good_units:
+            good_splits.append(original_id)
+
+    return np.setdiff1d(list(split_ids.keys()), good_splits)
 
 
 def get_drift_splits(
