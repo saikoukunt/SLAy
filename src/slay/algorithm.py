@@ -25,7 +25,7 @@ def compute_slay_merges(
     sorting_analyzer: SortingAnalyzer,
     merge_parameters: Any = "auto",
     splitting_probability: float = 0.3,
-    max_distance: int = 40,
+    max_distance: int = 60,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
     },
@@ -36,7 +36,7 @@ def compute_slay_merges(
     model_path: str | None = None,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 1.0,
+        "bin_ms": 0.5,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -130,8 +130,6 @@ def compute_slay_merges(
             ccg_metric,
             refractory_penalty,
         )
-    else:
-        merge_parameters = {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}
 
     final_metric = compute_final_metric(
         similarity, ccg_metric, refractory_penalty, merge_parameters
