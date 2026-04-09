@@ -105,7 +105,7 @@ def compute_parameter_performances(
         merges = find_merges(
             split_analyzer, final_metric, parameters["merge_threshold"]
         )
-        percent_merged, recall, _, _ = evaluate_merge_predictions(
+        percent_merged, recall, _, _, _ = evaluate_merge_predictions(
             merges, split_pairs, splits, len(split_analyzer.unit_ids)
         )
 
@@ -129,21 +129,32 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
             ]
     num_tp = 0
     num_fn = 0
-    tp_merges = []
-    fn_merges = []
+    true_positives = []
+    false_negatives = []
+    split_type_options, split_type_counts = np.unique(split_types, return_counts=True)
+    split_type_options = list(split_type_options)
+    recall_by_split_type = np.zeros(split_type_counts.shape[0])
 
-    for pair in true_splits:
+    for pair, split_type in zip(true_splits, split_types):
         if pair[0] not in merge_partners or pair[1] not in merge_partners[pair[0]]:
             num_fn += 1
-            fn_merges.append([pair[0], pair[1]])
+            false_negatives.append([pair[0], pair[1]])
         else:
             num_tp += 1
-            tp_merges.append([pair[0]] + merge_partners[pair[0]])
+            true_positives.append([pair[0]] + merge_partners[pair[0]])
+            recall_by_split_type[split_type_options.index(split_type)] += 1
 
     percent_merged = sum([len(merge) for merge in predicted_merges]) / num_units
     recall = num_tp / len(true_splits)
+    recall_by_split_type /= split_type_counts
 
-    return percent_merged, recall, tp_merges, fn_merges
+    return (
+        percent_merged,
+        recall,
+        recall_by_split_type,
+        true_positives,
+        false_negatives,
+    )
 
 
 def generate_parameter_combinations(
