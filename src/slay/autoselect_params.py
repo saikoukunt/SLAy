@@ -29,7 +29,7 @@ def autoselect_merge_parameters(
     similarity_threshold: float = 0.4,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 0.5,
+        "bin_ms": 1.0,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -70,6 +70,10 @@ def autoselect_merge_parameters(
         percents_merged[pareto_indices],
         recalls[pareto_indices],
     )
+    if autoselected_parameters is None:
+        autoselected_parameters = parameter_combinations[
+            pareto_indices[0]
+        ]  # parameter combinations are ordered from most to least conservative. pick most conservative parameters if we can't distinguish by artificial split performance
 
     return (
         autoselected_parameters,
@@ -163,7 +167,7 @@ def get_pareto_frontier(percents_merged, recalls):
 
     for i in range(num_combinations):
         for j in range(num_combinations):
-            if recalls[j] > recalls[i] and percents_merged[j] < percents_merged[i]:
+            if recalls[j] >= recalls[i] and percents_merged[j] < percents_merged[i]:
                 is_pareto[i] = False
                 break
     pareto_indices = np.argwhere(is_pareto).flatten()
@@ -172,10 +176,8 @@ def get_pareto_frontier(percents_merged, recalls):
 
 
 def get_best_parameters(parameter_combinations, percents_merged, recalls):
-    min_index = np.argmin(percents_merged)
-    max_index = np.argmax(percents_merged)
-    p1 = np.array([percents_merged[min_index], recalls[min_index]])
-    p2 = np.array([percents_merged[max_index], recalls[max_index]])
+    p1 = np.array([0, 0])
+    p2 = np.array([1, 1])
     line = p2 - p1
 
     max_distance = 0

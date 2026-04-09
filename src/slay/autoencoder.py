@@ -129,7 +129,7 @@ def extract_spike_snippets(
                 start_frame=start_frame,
                 end_frame=end_frame,
                 channel_ids=desired_channels,
-                return_in_uV=True,
+                return_in_uV=False,
             ).flatten()
 
         # Remove amplitude information
@@ -384,7 +384,7 @@ def compute_autoencoder_similarity(
 
     # Calculate similarity -- ref_dist is scaled to 0.6 similarity
     ref_dists = unit_spreads[:, None] + unit_spreads[None, :]
-    autoencoder_similarity = np.exp(-centroid_distances / ref_dists)
+    autoencoder_similarity = np.exp(-centroid_distances / (2 * ref_dists))
 
     # Zero out self-similarity
     np.fill_diagonal(autoencoder_similarity, 0)

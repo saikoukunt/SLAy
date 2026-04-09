@@ -36,7 +36,7 @@ def compute_slay_merges(
     model_path: str | None = None,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 0.5,
+        "bin_ms": 1.0,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -130,6 +130,8 @@ def compute_slay_merges(
             ccg_metric,
             refractory_penalty,
         )
+    if merge_parameters is None:
+        merge_parameters = {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}
 
     final_metric = compute_final_metric(
         similarity, ccg_metric, refractory_penalty, merge_parameters
