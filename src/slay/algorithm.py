@@ -24,7 +24,7 @@ from .metrics import (
 def compute_slay_merges(
     sorting_analyzer: SortingAnalyzer,
     merge_parameters: Any = "auto",
-    splitting_probability: float = 0.3,
+    splitting_probability: float = 0.4,
     max_distance: int = 60,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
@@ -36,7 +36,7 @@ def compute_slay_merges(
     model_path: str | None = None,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 1.0,
+        "bin_ms": 0.5,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -122,13 +122,16 @@ def compute_slay_merges(
     if merge_parameters == "auto":
         from .autoselect_params import autoselect_merge_parameters
 
-        merge_parameters = autoselect_merge_parameters(
+        merge_parameters, _, _, _, _ = autoselect_merge_parameters(
             sorting_analyzer,
             splitting_probability,
             similarity_type,
-            similarity,
-            ccg_metric,
-            refractory_penalty,
+            autoencoder_params,
+            autoencoder_architecture,
+            model_path,
+            similarity_threshold,
+            correlogram_params,
+            maximum_contamination,
         )
     if merge_parameters is None:
         merge_parameters = {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}

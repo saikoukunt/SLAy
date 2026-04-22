@@ -29,7 +29,7 @@ def autoselect_merge_parameters(
     similarity_threshold: float = 0.4,
     correlogram_params: dict[str, Any] = {
         "window_ms": 100,
-        "bin_ms": 1.0,
+        "bin_ms": 0.5,
         "method": "auto",
     },
     maximum_contamination: float = 0.15,
@@ -105,7 +105,7 @@ def compute_parameter_performances(
         merges = find_merges(
             split_analyzer, final_metric, parameters["merge_threshold"]
         )
-        percent_merged, recall, _, _, _ = evaluate_merge_predictions(
+        percent_merged, recall, _ = evaluate_merge_predictions(
             merges, split_pairs, splits, len(split_analyzer.unit_ids)
         )
 
@@ -132,8 +132,7 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
     true_positives = []
     false_negatives = []
     split_type_options, split_type_counts = np.unique(split_types, return_counts=True)
-    split_type_options = list(split_type_options)
-    recall_by_split_type = np.zeros(split_type_counts.shape[0])
+    recall_by_split_type = {split_type: 0 for split_type in split_type_options}
 
     for pair, split_type in zip(true_splits, split_types):
         if pair[0] not in merge_partners or pair[1] not in merge_partners[pair[0]]:
@@ -142,32 +141,30 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
         else:
             num_tp += 1
             true_positives.append([pair[0]] + merge_partners[pair[0]])
-            recall_by_split_type[split_type_options.index(split_type)] += 1
+            recall_by_split_type[split_type] += 1
 
     percent_merged = sum([len(merge) for merge in predicted_merges]) / num_units
     recall = num_tp / len(true_splits)
-    recall_by_split_type /= split_type_counts
+    recall_by_split_type = {
+        split_type: recall_by_split_type[split_type] / count
+        for split_type, count in zip(split_type_options, split_type_counts)
+    }
 
-    return (
-        percent_merged,
-        recall,
-        recall_by_split_type,
-        true_positives,
-        false_negatives,
-    )
+    return percent_merged, recall, recall_by_split_type
 
 
 def generate_parameter_combinations(
-    k1_values=np.arange(0.25, 0.55, 0.05),
-    k2=1,
+    k1_values=np.arange(0.20, 0.4, 0.05),
+    k2_values=[1],
     merge_threshold_values=np.arange(0.0, 0.85, 0.05),
 ):
     parameter_combinations = []
     for k1 in k1_values:
-        for merge_threshold in merge_threshold_values:
-            parameter_combinations.append(
-                {"k1": k1, "k2": k2, "merge_threshold": merge_threshold}
-            )
+        for k2 in k2_values:
+            for merge_threshold in merge_threshold_values:
+                parameter_combinations.append(
+                    {"k1": k1, "k2": k2, "merge_threshold": merge_threshold}
+                )
 
     return parameter_combinations
 
