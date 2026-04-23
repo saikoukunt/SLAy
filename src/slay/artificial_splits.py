@@ -123,8 +123,8 @@ def get_invalid_splits(split_analyzer, split_ids, max_id):
     split_quality_metrics.insert(2, "sliding_rp_viol", smoothed_slid_rps[max_index:])
 
     good_units = (
-        (split_quality_metrics["snr"] > 3)
-        & (split_quality_metrics["sliding_rp_viol"] < 0.1)
+        (split_quality_metrics["snr"] > 2)
+        & (split_quality_metrics["sliding_rp_viol"] < 0.2)
         & (split_quality_metrics["firing_rate"] > 0.1)
     )
     good_units = set(split_quality_metrics[good_units].index)

@@ -70,6 +70,10 @@ def autoselect_merge_parameters(
         percents_merged[pareto_indices],
         recalls[pareto_indices],
     )
+    if autoselected_parameters is None:
+        autoselected_parameters = parameter_combinations[
+            pareto_indices[0]
+        ]  # parameter combinations are ordered from most to least conservative. pick most conservative parameters if we can't distinguish by artificial split performance
 
     return (
         autoselected_parameters,
@@ -101,7 +105,7 @@ def compute_parameter_performances(
         merges = find_merges(
             split_analyzer, final_metric, parameters["merge_threshold"]
         )
-        percent_merged, recall, _, _ = evaluate_merge_predictions(
+        percent_merged, recall, _ = evaluate_merge_predictions(
             merges, split_pairs, splits, len(split_analyzer.unit_ids)
         )
 
@@ -125,34 +129,42 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
             ]
     num_tp = 0
     num_fn = 0
-    tp_merges = []
-    fn_merges = []
+    true_positives = []
+    false_negatives = []
+    split_type_options, split_type_counts = np.unique(split_types, return_counts=True)
+    recall_by_split_type = {split_type: 0 for split_type in split_type_options}
 
-    for pair in true_splits:
+    for pair, split_type in zip(true_splits, split_types):
         if pair[0] not in merge_partners or pair[1] not in merge_partners[pair[0]]:
             num_fn += 1
-            fn_merges.append([pair[0], pair[1]])
+            false_negatives.append([pair[0], pair[1]])
         else:
             num_tp += 1
-            tp_merges.append([pair[0]] + merge_partners[pair[0]])
+            true_positives.append([pair[0]] + merge_partners[pair[0]])
+            recall_by_split_type[split_type] += 1
 
     percent_merged = sum([len(merge) for merge in predicted_merges]) / num_units
     recall = num_tp / len(true_splits)
+    recall_by_split_type = {
+        split_type: recall_by_split_type[split_type] / count
+        for split_type, count in zip(split_type_options, split_type_counts)
+    }
 
-    return percent_merged, recall, tp_merges, fn_merges
+    return percent_merged, recall, recall_by_split_type
 
 
 def generate_parameter_combinations(
     k1_values=np.arange(0.25, 0.55, 0.05),
-    k2=1,
-    merge_threshold_values=np.arange(0.0, 0.85, 0.05),
+    k2_values=[1],
+    merge_threshold_values=np.arange(0.0, 0.75, 0.05),
 ):
     parameter_combinations = []
     for k1 in k1_values:
-        for merge_threshold in merge_threshold_values:
-            parameter_combinations.append(
-                {"k1": k1, "k2": k2, "merge_threshold": merge_threshold}
-            )
+        for k2 in k2_values:
+            for merge_threshold in merge_threshold_values:
+                parameter_combinations.append(
+                    {"k1": k1, "k2": k2, "merge_threshold": merge_threshold}
+                )
 
     return parameter_combinations
 
@@ -163,7 +175,7 @@ def get_pareto_frontier(percents_merged, recalls):
 
     for i in range(num_combinations):
         for j in range(num_combinations):
-            if recalls[j] > recalls[i] and percents_merged[j] < percents_merged[i]:
+            if recalls[j] >= recalls[i] and percents_merged[j] < percents_merged[i]:
                 is_pareto[i] = False
                 break
     pareto_indices = np.argwhere(is_pareto).flatten()
@@ -172,10 +184,8 @@ def get_pareto_frontier(percents_merged, recalls):
 
 
 def get_best_parameters(parameter_combinations, percents_merged, recalls):
-    min_index = np.argmin(percents_merged)
-    max_index = np.argmax(percents_merged)
-    p1 = np.array([percents_merged[min_index], recalls[min_index]])
-    p2 = np.array([percents_merged[max_index], recalls[max_index]])
+    p1 = np.array([0, 0])
+    p2 = np.array([1, 1])
     line = p2 - p1
 
     max_distance = 0
