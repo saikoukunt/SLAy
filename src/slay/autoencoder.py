@@ -353,13 +353,20 @@ def compute_autoencoder_similarity(
             tqdm(dataloader, desc="Calculating latent representations")
         ):
             spikes, labels, idx = data[0].to(device), data[1].to(device), data[2]
+            # NumPy 2 treats a 1-D torch.Tensor of length 1 as ambiguous with a
+            # 0-D scalar when used as a fancy index, yielding
+            # ``ValueError: setting an array element with a sequence`` on the
+            # last batch whenever ``len(dataset) % batch_size == 1``. Convert
+            # the index tensor to numpy up front — cheap, works in every batch
+            # size, and decouples from torch/numpy array-api quirks.
+            idx_np = idx.cpu().numpy() if isinstance(idx, torch.Tensor) else np.asarray(idx)
 
             reconstructions, _ = autoencoder(spikes)
             loss += loss_fn(spikes, reconstructions).item()
 
             batch_latents = autoencoder.encode(spikes)
-            spike_latents[idx] = batch_latents.cpu().detach().numpy()
-            spike_labels[idx] = labels.cpu().detach().numpy()
+            spike_latents[idx_np] = batch_latents.cpu().detach().numpy()
+            spike_labels[idx_np] = labels.cpu().detach().numpy()
 
     tqdm.write(f"\nAverage Loss: {loss / len(dataloader):.4f}")
 
