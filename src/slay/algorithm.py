@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 import numpy as np
 import torch
+import tqdm
 from numpy.typing import NDArray
 from spikeinterface.core import SortingAnalyzer
 from spikeinterface.postprocessing import compute_template_similarity
@@ -25,7 +26,7 @@ def compute_slay_merges(
     sorting_analyzer: SortingAnalyzer,
     merge_parameters: Any = "auto",
     splitting_probability: float = 0.4,
-    max_distance: int = 60,
+    max_distance: int = 100,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
     },
@@ -133,6 +134,8 @@ def compute_slay_merges(
             correlogram_params,
             maximum_contamination,
         )
+
+        tqdm.tqdm.write(f"Automatically selected parameters {merge_parameters}")
     if merge_parameters is None:
         merge_parameters = {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}
 

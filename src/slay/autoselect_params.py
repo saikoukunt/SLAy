@@ -154,9 +154,9 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
 
 
 def generate_parameter_combinations(
-    k1_values=np.arange(0.20, 0.4, 0.05),
+    k1_values=np.arange(0.25, 0.55, 0.05),
     k2_values=[1],
-    merge_threshold_values=np.arange(0.0, 0.85, 0.05),
+    merge_threshold_values=np.arange(0.0, 0.75, 0.05),
 ):
     parameter_combinations = []
     for k1 in k1_values:

@@ -132,11 +132,6 @@ def extract_spike_snippets(
                 return_in_uV=False,
             ).flatten()
 
-        # Remove amplitude information
-        amplitudes = np.abs(snippets).max(axis=1, keepdims=True)
-        amplitudes = np.where(amplitudes > 1.0, amplitudes, 1.0)
-        snippets /= amplitudes
-
         # Store unit labels and waveforms
         spike_labels[snip_idx : snip_idx + n_spikes_unit] = unit_idx
         spikes[snip_idx : snip_idx + n_spikes_unit, :] = snippets
@@ -399,7 +394,7 @@ def compute_autoencoder_similarity(
             unit_i_peak_chan = peak_chans[unit_ids[i]]
             unit_j_peak_chan = peak_chans[unit_ids[j]]
 
-            # Penalize by sigmoided version of geometric mean of cross-decay
+            # Penalize by geometric mean of cross-decay
             if (
                 (amplitudes[i, unit_j_peak_chan] == 0)
                 or (amplitudes[i, unit_i_peak_chan] == 0)
@@ -415,8 +410,6 @@ def compute_autoencoder_similarity(
                     * amplitudes[j, unit_i_peak_chan]
                     / amplitudes[j, unit_j_peak_chan]
                 )
-
-            # decay_pen = 1 / (1 + np.exp(-10 * (decay_pen_raw - 0.5)))
 
             autoencoder_similarity[i, j] *= decay_pen_raw
             autoencoder_similarity[j, i] = autoencoder_similarity[i, j]
