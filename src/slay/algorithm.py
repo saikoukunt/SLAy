@@ -126,9 +126,6 @@ def compute_slay_merges(
             sorting_analyzer,
             splitting_probability,
             similarity_type,
-            similarity,
-            ccg_metric,
-            refractory_penalty,
         )
 
     final_metric = compute_final_metric(
