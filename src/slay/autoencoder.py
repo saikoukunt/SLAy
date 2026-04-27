@@ -354,6 +354,9 @@ def compute_autoencoder_similarity(
         ):
             spikes, labels, idx = data[0].to(device), data[1].to(device), data[2]
 
+            # convert idx to numpy to handle edge case where batch size = 1
+            idx = idx.cpu().numpy() if isinstance(idx, torch.Tensor) else np.asarray(idx)
+
             reconstructions, _ = autoencoder(spikes)
             loss += loss_fn(spikes, reconstructions).item()
 
