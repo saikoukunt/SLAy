@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from spikeinterface.core import SortingAnalyzer
 from spikeinterface.curation import compute_merge_unit_groups
@@ -10,164 +9,9 @@ from spikeinterface.curation.curation_tools import resolve_merging_graph
 from spikeinterface.qualitymetrics import compute_refrac_period_violations
 
 import slay
-from slay.autoselect_params import (
-    autoselect_merge_parameters,
-    evaluate_merge_predictions,
-)
+from slay.autoselect_params import evaluate_merge_predictions
+
 from tqdm import tqdm
-
-
-def compare_merging_algorithms_on_artificial_splits(
-    sorting_analyzer: SortingAnalyzer, model_path
-):
-    (
-        autoselected_parameters,
-        parameter_combinations,
-        split_analyzer,
-        split_ids,
-        split_types,
-    ) = autoselect_merge_parameters(
-        sorting_analyzer,
-        0.3,
-        similarity_type="autoencoder",
-        model_path=model_path,
-        random_seed=0,
-    )
-    recalls = np.array([combo["recall"] for combo in parameter_combinations])
-    percents_merged = np.array(
-        [combo["percent_merged"] for combo in parameter_combinations]
-    )
-    pareto_indices = slay.autoselect_params.get_pareto_frontier(
-        percents_merged, recalls
-    )
-    merges, split_analyzer, slay_metrics = slay.compute_slay_merges(
-        split_analyzer,
-        merge_parameters={"k1": 0.25, "k2": 1, "merge_threshold": 0.5},
-        similarity_type="autoencoder",
-        model_path=model_path,
-    )
-    slay_default_percent_merged, slay_default_recall, tp_merges, fn_merges = (
-        evaluate_merge_predictions(
-            merges,
-            list(split_ids.values()),
-            list(split_types.values()),
-            len(split_analyzer.unit_ids),
-        )
-    )
-
-    sim_corr_percents_merged, sim_corr_recalls = sweep_si_merge_parameters(
-        split_analyzer, split_ids, split_types, "similarity_correlograms"
-    )
-    merges = compute_merge_unit_groups(split_analyzer)
-    sim_corr_default_percent_merged, sim_corr_default_recall, _, _ = (
-        evaluate_merge_predictions(
-            merges,
-            list(split_ids.values()),
-            list(split_types.values()),
-            len(split_analyzer.unit_ids),
-        )
-    )
-
-    xcont_percents_merged, xcont_recalls = sweep_si_merge_parameters(
-        split_analyzer, split_ids, split_types, "x_contaminations"
-    )
-    merges = compute_merge_unit_groups(split_analyzer, "x_contaminations")
-    xcont_default_percent_merged, xcont_default_recall, tp_merges, fn_merges = (
-        evaluate_merge_predictions(
-            merges,
-            list(split_ids.values()),
-            list(split_types.values()),
-            len(split_analyzer.unit_ids),
-        )
-    )
-
-    create_pareto_comparison_plot(
-        autoselected_parameters,
-        percents_merged,
-        recalls,
-        pareto_indices,
-        slay_default_percent_merged,
-        slay_default_recall,
-        sim_corr_percents_merged,
-        sim_corr_recalls,
-        sim_corr_default_percent_merged,
-        sim_corr_default_recall,
-        xcont_percents_merged,
-        xcont_recalls,
-        xcont_default_percent_merged,
-        xcont_default_recall,
-    )
-
-
-def create_pareto_comparison_plot(
-    autoselected_parameters,
-    percents_merged,
-    recalls,
-    pareto_indices,
-    slay_default_percent_merged,
-    slay_default_recall,
-    sim_corr_percents_merged,
-    sim_corr_recalls,
-    sim_corr_default_percent_merged,
-    sim_corr_default_recall,
-    xcont_percents_merged,
-    xcont_recalls,
-    xcont_default_percent_merged,
-    xcont_default_recall,
-):
-    plt.scatter(
-        percents_merged[pareto_indices],
-        recalls[pareto_indices],
-        label="SLAy Pareto frontier",
-    )
-    plt.scatter(
-        autoselected_parameters["percent_merged"],
-        autoselected_parameters["recall"],
-        c="r",
-        label="Best SLAy parameters (knee)",
-    )
-    plt.scatter(
-        slay_default_percent_merged,
-        slay_default_recall,
-        c="magenta",
-        label="Default SLAy parameters",
-    )
-
-    plt.scatter(
-        sim_corr_percents_merged,
-        sim_corr_recalls,
-        c="lime",
-        label="sim-corr Pareto frontier",
-    )
-    plt.scatter(
-        sim_corr_default_percent_merged,
-        sim_corr_default_recall,
-        c="g",
-        label="sim-corr default",
-    )
-
-    plt.scatter(
-        xcont_percents_merged,
-        xcont_recalls,
-        c="cyan",
-        label="xcont Pareto frontier",
-    )
-    plt.scatter(
-        xcont_default_percent_merged,
-        xcont_default_recall,
-        c="red",
-        label="xcont default",
-    )
-
-    plt.xlabel("% of total clusters merged")
-    plt.ylabel("Recall on artificial splits")
-    plt.legend()
-
-    plt.show()
-    plt.savefig(
-        "../figures/revisions/si_merge_comparison/bijan_ks4.svg",
-        transparent=True,
-    )
 
 
 def sweep_si_merge_parameters(
@@ -200,13 +44,24 @@ def sweep_si_merge_parameters(
 
     pair_mask = pair_mask & (outputs["unit_distances"] <= 150)
 
+    n = len(split_analyzer.unit_ids)
+    cics_cache = {
+        "result_mask": np.zeros((n, n), dtype=bool),
+        "computed_mask": np.zeros((n, n), dtype=bool),
+    }
     for i, parameters in enumerate(
         tqdm(parameter_combinations, desc=f"{merge_preset} parameter sweep")
     ):
         merges = _rethreshold_si_metrics(
-            split_analyzer, outputs, pair_mask, contaminations, parameters, merge_preset
+            split_analyzer,
+            outputs,
+            pair_mask,
+            contaminations,
+            parameters,
+            merge_preset,
+            cics_cache,
         )
-        percent_merged, recall, _, _ = evaluate_merge_predictions(
+        percent_merged, recall, _ = evaluate_merge_predictions(
             merges,
             list(split_ids.values()),
             list(split_types.values()),
@@ -224,11 +79,15 @@ def sweep_si_merge_parameters(
         percents_merged, recalls
     )
 
-    return percents_merged[pareto_indices], recalls[pareto_indices]
+    return (
+        [parameter_combinations[i] for i in pareto_indices],
+        percents_merged[pareto_indices],
+        recalls[pareto_indices],
+    )
 
 
 def _rethreshold_si_metrics(
-    split_analyzer, outputs, pair_mask, contaminations, parameters, preset
+    split_analyzer, outputs, pair_mask, contaminations, parameters, preset, cics_cache
 ):
     pair_mask = pair_mask & (
         outputs["templates_diff"]
@@ -241,7 +100,7 @@ def _rethreshold_si_metrics(
                 < parameters["correlogram"]["corr_diff_thresh"]
             )
         case "x_contaminations":
-            CC, p_values = compute_cross_contaminations(
+            _, p_values = compute_cross_contaminations(
                 split_analyzer,
                 pair_mask,
                 parameters["cross_contamination"]["cc_thresh"],
@@ -252,9 +111,14 @@ def _rethreshold_si_metrics(
         case _:
             raise NotImplementedError(f"Unknown preset '{preset}'")
 
-    pair_mask, _ = check_improve_contaminations_score(
-        split_analyzer, pair_mask, contaminations, 1.5, 1.0, 0.3
-    )
+    uncached_mask = pair_mask & ~cics_cache["computed_mask"]
+    if uncached_mask.any():
+        result_mask, _ = check_improve_contaminations_score(
+            split_analyzer, uncached_mask, contaminations, 1.5, 1.0, 0.3
+        )
+        cics_cache["result_mask"][uncached_mask] = result_mask[uncached_mask]
+        cics_cache["computed_mask"] |= uncached_mask
+    pair_mask = pair_mask & cics_cache["result_mask"]
     ind1, ind2 = np.nonzero(pair_mask)
     merge_pairs = list(
         zip(split_analyzer.unit_ids[ind1], split_analyzer.unit_ids[ind2])
