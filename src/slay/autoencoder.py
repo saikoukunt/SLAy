@@ -5,10 +5,7 @@ import scipy.spatial.distance as dist
 import torch
 import torch.nn as nn
 from numpy.typing import NDArray
-from scipy.sparse import lil_array
-from scipy.sparse.csgraph import dijkstra
 from sklearn.model_selection import train_test_split
-from sklearn.neighbors import NearestNeighbors
 from spikeinterface.core import SortingAnalyzer, get_template_extremum_channel
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm import tqdm
@@ -355,7 +352,9 @@ def compute_autoencoder_similarity(
             spikes, labels, idx = data[0].to(device), data[1].to(device), data[2]
 
             # convert idx to numpy to handle edge case where batch size = 1
-            idx = idx.cpu().numpy() if isinstance(idx, torch.Tensor) else np.asarray(idx)
+            idx = (
+                idx.cpu().numpy() if isinstance(idx, torch.Tensor) else np.asarray(idx)
+            )
 
             reconstructions, _ = autoencoder(spikes)
             loss += loss_fn(spikes, reconstructions).item()
