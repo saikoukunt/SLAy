@@ -6,14 +6,14 @@ authors = [
 ]
 description = "A tool for fixing oversplitting errors in high-density ephys spike sorting."
 readme = "README.md"
-requires-python = ">=3.11.0"
+requires-python = "~=3.11.0"
 dependencies = [
     "joblib>=1.5.2",
     "numpy>=2.2.6",
     "pandas>=2.3.3",
     "scikit-learn>=1.7.2",
     "scipy>=1.15.3",
-    "spikeinterface>=0.103.2",
+    "spikeinterface>=0.104.0",
     "torch>=2.9.0",
     "tqdm>=4.67.1",
 ]

@@ -47,17 +47,17 @@ def compute_slay_merges(
     """
     Compute unit merges using the SLAy algorithm.
 
-    Given a SpikeInterface SortingAnalyzer with the templates and ccg extensions precomputed,
-    identifies units that should be merged based on spike waveform similarity,
-    cross-correlogram metrics, and refractory period violations. It supports two similarity
+    Identifies units that should be merged based on spike waveform similarity,
+    cross-correlogram metrics, and refractory period violations. Required extensions
+    are computed automatically if not already present. Supports two similarity
     computation methods: autoencoder-based and L2-based template similarity. By default,
-    it selects parameters automatically, but parameters can be specified manually through
+    parameters are selected automatically, but can be specified manually through
     the `merge_parameters` argument.
 
     Parameters
     ----------
     sorting_analyzer : SortingAnalyzer
-        The SpikeInterface sorting analyzer with precomputed extensions.
+        The SpikeInterface sorting analyzer to compute merges for.
     merge_parameters : dict[str, float] or "auto" or None, default: "auto"
         Dictionary containing merge weights "k1", "k2", and "merge_threshold", or "auto"
         to automatically select optimal parameters using artificial splits, or None to
@@ -195,6 +195,12 @@ def _compute_slay_metrics(
     **job_kwargs,
 ):
     """Compute pairwise similarity, CCG metric, and refractory penalty for all unit pairs."""
+
+    if not sorting_analyzer.has_extension("random_spikes"):
+        sorting_analyzer.compute(["random_spikes", "templates"], **job_kwargs)
+    elif not sorting_analyzer.has_extension("templates"):
+        sorting_analyzer.compute("templates", **job_kwargs)
+
     match similarity_type:
         case "autoencoder":
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -224,11 +230,6 @@ def _compute_slay_metrics(
             )
 
         case "l2":
-            if not sorting_analyzer.has_extension("random_spikes"):
-                sorting_analyzer.compute(["random_spikes", "templates"], **job_kwargs)
-            elif not sorting_analyzer.has_extension("templates"):
-                sorting_analyzer.compute("templates", **job_kwargs)
-
             similarity_extension = sorting_analyzer.get_extension("template_similarity")
             if (similarity_extension is None) or (
                 similarity_extension.params["method"] != "l2"
