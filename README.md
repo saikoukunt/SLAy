@@ -1,6 +1,24 @@
-# SLAy: slay oversplitting errors in your spike sorting
+# SLAy oversplitting errors in your spike sorting!
 
 Manually merging spike sorted units is time-consuming, subjective, and lacks reproducibility. SLAy uses quantitative metrics to automatically identify oversplit units, which can then be merged automatically or reviewed further manually. Specifically, we developed a novel metrics for **(1)** calculating waveform similarity using an autoencoder, and **(2)** capturing structure in cross-correlograms. When used with automatic unit quality labelling (e.g., via [SpikeInterface](https://github.com/SpikeInterface/spikeinterface) or [BombCell](https://github.com/Julie-Fabre/Bombcell)), SLAy can fully automate the manual curation process, making it feasible to quickly process many single- or multi- probe ephys recordings. Read our [paper](https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1) to learn more about SLAy.
+
+- [Installation](#installation)
+  - [uv (recommended)](#uv-recommended)
+  - [pip + conda (slower)](#pip--conda-slower)
+- [(Prerequisite) SpikeInterface SortingAnalyzer](#prerequisite-spikeinterface-sortinganalyzer)
+  - [Create a SortingAnalyzer](#create-a-sortinganalyzer)
+  - [Compute extensions](#compute-extensions)
+  - [Remove noise and multi-units](#remove-noise-and-multi-units)
+- [Using SLAy](#using-slay)
+  - [Manual parameter selection](#manual-parameter-selection)
+  - [L2 waveform similarity](#l2-waveform-similarity)
+  - [Directly through SpikeInterface](#directly-through-spikeinterface)
+  - [Advanced](#advanced)
+    - [Use a custom autoencoder architecture or training](#use-a-custom-autoencoder-architecture-or-training)
+    - [Train an autoencoder with spikes from multiple recordings](#train-an-autoencoder-with-spikes-from-multiple-recordings)
+- [Questions/Issues](#questionsissues)
+- [Citing](#citing)
+
 
 ## Installation
 We recommend using [uv](https://docs.astral.sh/uv/) to install SLAy. If you want to use your GPU to train SLAy's autoencoder, which is recommended, you will also need CUDA (if on an NVIDIA GPU) and the GPU version of pytorch. The instructions below show how to install pytorch for CUDA 12.6, but you should modify it to match your CUDA version.
@@ -81,6 +99,8 @@ sorting_analyzer.compute("correlograms", window_ms=100, bin_ms=2.) # change to m
 sorting_analyzer.compute("quality_metrics", metric_names=["snr", "firing_rate"])
 ```
 
+You should set the cross-correlogram parameters based on the standard range for your brain region(s) and animal model.
+
 ### Remove noise and multi-units
 To avoid extra computations, you should give SLAy a `SortingAnalyzer` that does not contain noise or multi-units. This can be done with `si.select_units()`.
 
@@ -97,7 +117,7 @@ merges, sorting_analyzer, slay_metrics = compute_slay_merges(
     model_path="save/path/for/autoencoder.pt",
 )
 ```
-This will extract spike snippets from your recording, train and save the autoencoder, compute the SLAy merge metrics, and output a list of suggested merges. By default, SLAy will automatically select the appropriate parameters (metric coefficients and merge threshold) for your recording. You can use SpikeInterface to merge the suggestions:
+This will extract spike snippets from your recording, train and save the autoencoder, compute the SLAy merge metrics, and output a list of suggested merges. By default, SLAy will automatically select the appropriate parameters (coefficients and merge threshold) for your recording. You can use SpikeInterface to merge the suggestions:
 
 ```python
 merged_sorting_analyzer = sorting_analyzer.merge_units(
@@ -110,9 +130,12 @@ merged_sorting_analyzer = sorting_analyzer.merge_units(
 
 or review them manually in [SpikeInterface-GUI](https://github.com/SpikeInterface/spikeinterface-gui) or [Phy](https://github.com/cortex-lab/phy).
 
+> Note: If you have a pretrained model, you can point `model_path` to the `.pt` file and SLAy will automatically use it! SLAy's autoencoder usually trains in under 10 minutes, but if you are processing many recordings from the same animal with the same site map, you can save time by reusing the same autoencoder.
+
 
 ### Manual parameter selection
-You can specify manual parameters through the `merge_parameters` argument. You must specify a dictionary with values for "k1" (coefficient for CCG structure metric), "k2" (coefficient for refractory period penalty), and "merge_threshold". Below is a reasonable starting point for manual adjustment:
+
+If you want manual control over SLAy's parameters,  you can specify custom parameters through the `merge_parameters` argument. You must specify a dictionary with values for "k1" (coefficient for CCG structure metric), "k2" (coefficient for refractory period penalty), and "merge_threshold". Below is a reasonable starting point for manual adjustment:
 
 ```python
 merges, sorting_analyzer, slay_metrics = compute_slay_merges(
@@ -144,13 +167,16 @@ from spikeinterface.curation import compute_merge_unit_groups
 merges = compute_merge_unit_groups(
     sorting_analyzer, 
     preset="slay",
-    steps_params={"slay_score": {"k1": 0.25, "k2": 1.0, "slay_threshold": 0.5}}
+    steps_params={"slay_score": {"k1": 0.25, "k2": 1.0, "slay_threshold": 0.5}},
+    resolve_graph=True      # find multi-way merges (>2 units)
 )
-
-
-
+merged_sorting_analyzer = sorting_analyzer.merge_units(
+    merges,
+    censor_ms=5/30000,      # remove duplicate spikes
+    format="binary_folder",
+    folder="/my_merged_sorting_analyzer"
+)
 ```
-
 
 ### Advanced
 
