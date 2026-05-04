@@ -21,10 +21,10 @@ def autoselect_merge_parameters(
     sorting_analyzer: SortingAnalyzer,
     splitting_probability,
     similarity_type: str = "autoencoder",
+    autoencoder_architecture: type = AE,
     autoencoder_params: dict[str, Any] = {
         "num_chan": 8,
     },
-    autoencoder: nn.Module = None,
     model_path: str = None,
     similarity_threshold: float = 0.4,
     correlogram_params: dict[str, Any] = {
@@ -53,11 +53,11 @@ def autoselect_merge_parameters(
         Total fraction of units to artificially split for parameter evaluation.
     similarity_type : str, default: "autoencoder"
         Method for computing similarity: "autoencoder" or "l2".
+    autoencoder_architecture : type, default: AE
+        The autoencoder architecture class to instantiate and train.
+        Only used when similarity_type="autoencoder".
     autoencoder_params : dict[str, Any], default: {"num_chan": 8}
         Parameters for spike snippet extraction and autoencoder training.
-        Only used when similarity_type="autoencoder".
-    autoencoder : nn.Module or None, default: None
-        Pre-trained autoencoder model. If None, a new AE is instantiated and trained.
         Only used when similarity_type="autoencoder".
     model_path : str or None, default: None
         Path to a saved autoencoder model to load. Only used when similarity_type="autoencoder".
@@ -95,7 +95,7 @@ def autoselect_merge_parameters(
     similarity, ccg_metric, refractory_penalty = _compute_slay_metrics(
         split_analyzer,
         autoencoder_params,
-        AE,
+        autoencoder_architecture,
         train_autoencoder,
         similarity_threshold,
         False,
@@ -181,19 +181,14 @@ def evaluate_merge_predictions(predicted_merges, true_splits, split_types, num_u
                 partner_id for partner_id in merge if partner_id != unit_id
             ]
     num_tp = 0
-    num_fn = 0
-    true_positives = []
-    false_negatives = []
     split_type_options, split_type_counts = np.unique(split_types, return_counts=True)
     recall_by_split_type = {split_type: 0 for split_type in split_type_options}
 
     for pair, split_type in zip(true_splits, split_types):
         if pair[0] not in merge_partners or pair[1] not in merge_partners[pair[0]]:
-            num_fn += 1
-            false_negatives.append([pair[0], pair[1]])
+            pass
         else:
             num_tp += 1
-            true_positives.append([pair[0]] + merge_partners[pair[0]])
             recall_by_split_type[split_type] += 1
 
     percent_merged = sum([len(merge) for merge in predicted_merges]) / num_units

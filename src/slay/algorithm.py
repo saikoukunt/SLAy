@@ -110,9 +110,22 @@ def compute_slay_merges(
 
     Raises
     ------
+    ValueError
+        If similarity_type="autoencoder" and merge_parameters="auto" but model_path
+        is not provided.
     NotImplementedError
         If an unknown similarity_type is provided.
     """
+    if (
+        merge_parameters == "auto"
+        and similarity_type == "autoencoder"
+        and model_path is None
+    ):
+        raise ValueError(
+            "model_path must be provided when similarity_type='autoencoder' and "
+            "merge_parameters='auto' so the trained model can be reused during "
+            "parameter selection."
+        )
 
     similarity, ccg_metric, refractory_penalty = _compute_slay_metrics(
         sorting_analyzer,
@@ -135,8 +148,8 @@ def compute_slay_merges(
             sorting_analyzer,
             splitting_probability,
             similarity_type,
-            autoencoder_params,
             autoencoder_architecture,
+            autoencoder_params,
             model_path,
             similarity_threshold,
             correlogram_params,
