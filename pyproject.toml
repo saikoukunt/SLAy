@@ -1,10 +1,12 @@
 [project]
 name = "slay"
-version = "0.1.0"
+version = "0.1.0a0"
 authors = [
     { name = "Sai Koukuntla", email = "sai.koukunt@gmail.com" }
 ]
-requires-python = "~=3.11.0"
+description = "A tool for fixing oversplitting errors in high-density ephys spike sorting."
+readme = "README.md"
+requires-python = ">=3.11.0"
 dependencies = [
     "joblib>=1.5.2",
     "numpy>=2.2.6",
@@ -15,6 +17,8 @@ dependencies = [
     "torch>=2.9.0",
     "tqdm>=4.67.1",
 ]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 
 
 [[tool.uv.index]]
