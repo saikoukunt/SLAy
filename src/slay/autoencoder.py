@@ -175,6 +175,23 @@ class SpikeDataset(Dataset):
 
 
 class AE(nn.Module):
+    """
+    Fully connected autoencoder for learning spike waveform shape features.
+
+    Consists of a three-layer encoder that maps flattened multi-channel spike
+    snippets to a low-dimensional latent space, and a symmetric decoder that
+    reconstructs the input. All hidden layers use GELU activations.
+
+    Args:
+        zDim (int): Dimensionality of the latent space. Defaults to 15.
+        num_chan (int): Number of channels in each spike snippet. Defaults to 8.
+        num_samp (int): Number of time samples in each spike snippet. Defaults to 40.
+        n_units_l1 (int): Number of units in the first hidden layer of the encoder
+            (and last of the decoder). Defaults to 600.
+        n_units_l2 (int): Number of units in the second hidden layer of the encoder
+            (and second-to-last of the decoder). Defaults to 300.
+    """
+
     def __init__(
         self,
         zDim: int = 15,
@@ -224,28 +241,24 @@ def train_autoencoder(
     verbose=True,
 ):
     """
-    Creates and trains an autoencoder on the given spike dataset.
+    Trains the given autoencoder on spike snippets.
 
     Args:
-        spikes (torch.Tensor): Spike snippets.
-        cl_ids (NDArray): Cluster ids of spike snippets.
-        n_filt (int): Number of filters in the last convolutional layer before
-            the bottleneck. Defaults to 256, values larger than 1024 cause
-            CUDA to run out of memory on most GPUs.
-        num_epochs (int): number of training epochs. Defaults to 25.
-        zDi (int): latent dimensionality of CN_AE. Defaults to 15.
-        lr (float): optimizer learning rate. Defaults to 1e-3.
-        pre_samples (int): number of samples included before spike time. Defaults
-            to 10.
-        post_samples (int): number of samples included after spike time.
-            Defaults to 30.
-        do_shft (bool): True if training samples should be randomly time-shifted to
-            explicitly induce time shift invariance. Note that the architecture is
-            implicitly invariant to time shifts due to the convolutional layers.
-        model (nn.Module, optional): Pre-trained model, if using.
+        spikes (torch.Tensor): Spike snippets with shape (n_spikes, num_chan * num_samp).
+        cl_ids (NDArray): Cluster IDs for each spike snippet, used for stratified
+            train/test splitting and balanced batch sampling.
+        model (nn.Module): Autoencoder model to train (modified in-place).
+        num_epochs (int): Number of training epochs. Defaults to 25.
+        lr (float): Adam optimizer learning rate. Defaults to 1e-4.
+        batch_size (int): Number of spikes per training batch. Defaults to 128.
+        return_inds (bool): If True, also returns test set indices. Defaults to False.
+        verbose (bool): If True, prints per-epoch train/test MSE. Defaults to True.
+
     Returns:
-        net (CN_AE): The trained network.
-        spk_data (SpikeDataset): Dataset containing snippets used for training.
+        model (nn.Module): The trained autoencoder.
+        spk_data (SpikeDataset): The full spike dataset used for training/testing.
+        test_indices (NDArray): Indices of the test set in spk_data. Only returned
+            if return_inds=True.
     """
     device, spk_data, train_indices, test_indices, train_loader, test_loader = (
         _create_dataloaders(spikes, cl_ids, batch_size)
@@ -305,16 +318,28 @@ def compute_autoencoder_similarity(
     """
     Calculates autoencoder-based unit similarity using latent space representations.
 
+    Encodes spike snippets into a latent space and computes per-unit centroid
+    distances. Similarity is exp(-d / (2 * (spread_i + spread_j))), where d is
+    the Euclidean distance between unit centroids and spread is the mean distance
+    of each unit's spikes from its centroid. This normalizes by the combined
+    within-cluster spread so that pairs separated by one combined spread unit
+    receive ~0.6 similarity. Pairs with mismatched amplitude decay across channels
+    are penalized by the geometric mean of their cross-decay ratios.
+
     Args:
         sorting_analyzer (SortingAnalyzer): SpikeInterface SortingAnalyzer containing
-            unit templates and metadata.
-        spike_dataset (SpikeDataset): Dataset containing spike snippets and unit labels.
-        autoencoder (nn.Module): Trained autoencoder model in eval mode.
+            unit templates and metadata. Must have 'templates' and 'random_spikes'
+            extensions computed.
+        autoencoder (nn.Module): Trained autoencoder model.
+        autoencoder_params (dict): Autoencoder configuration. Must include "num_chan"
+            (number of channels per snippet). Defaults to {"num_chan": 8}.
+        spike_dataset (SpikeDataset, optional): Pre-extracted spike dataset. If None,
+            snippets are extracted from the sorting_analyzer. Defaults to None.
         zDim (int, optional): Latent dimensionality of the autoencoder. Defaults to 15.
 
     Returns:
-        ae_sim (NDArray): Pairwise autoencoder-based similarity matrix with shape
-            (# units, # units). ae_sim[i,j] = 1 indicates maximal similarity.
+        ae_sim (NDArray): Pairwise similarity matrix with shape (n_units, n_units).
+            Values near 1 indicate high similarity; diagonal is 0.
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -420,6 +445,7 @@ def compute_autoencoder_similarity(
 
 
 def _create_dataloaders(spikes, cl_ids, batch_size):
+    """Split spikes into stratified train/test sets and return class-balanced DataLoaders for each."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     labels = cl_ids

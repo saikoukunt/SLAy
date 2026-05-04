@@ -47,44 +47,53 @@ def compute_slay_merges(
     """
     Compute unit merges using the SLAy algorithm.
 
-    This function identifies units that should be merged based on spike waveform similarity,
+    Given a SpikeInterface SortingAnalyzer with the templates and ccg extensions precomputed,
+    identifies units that should be merged based on spike waveform similarity,
     cross-correlogram metrics, and refractory period violations. It supports two similarity
-    computation methods: autoencoder-based and L2-based template similarity.
+    computation methods: autoencoder-based and L2-based template similarity. By default,
+    it selects parameters automatically, but parameters can be specified manually through
+    the `merge_parameters` argument.
 
     Parameters
     ----------
     sorting_analyzer : SortingAnalyzer
-        The sorting analyzer containing spike sorting results.
-    merge_parameters : Any, default: "auto"
-        Dictionary containing weights "k1" and "k2" for combining metrics, or "auto"
-        to automatically select optimal parameters.
-    merge_threshold : float, default: 0.5
-        Threshold for the final merge metric above which units are merged.
-    max_distance : int, default: 10
-        Maximum distance (in channels) between peak channels for a merge to be valid.
-    autoencoder_params : dict[str, Any], default: {}
+        The SpikeInterface sorting analyzer with precomputed extensions.
+    merge_parameters : dict[str, float] or "auto" or None, default: "auto"
+        Dictionary containing merge weights "k1", "k2", and "merge_threshold", or "auto"
+        to automatically select optimal parameters using artificial splits, or None to
+        use default parameters {"k1": 0.25, "k2": 1, "merge_threshold": 0.5}.
+    splitting_probability : float, default: 0.4
+        Total fraction of units to artificially split when estimating merge parameters.
+        Only used when merge_parameters="auto".
+    max_distance : int, default: 100
+        Maximum Euclidean distance (in probe units) between peak channel locations
+        for a merge to be considered.
+    autoencoder_params : dict[str, Any], default: {"num_chan": 8}
         Parameters for spike snippet extraction and autoencoder training.
         Only used when similarity_type="autoencoder".
-    autoencoder_architecture : default: CN_AE
+    autoencoder_architecture : type, default: AE
         The autoencoder architecture class to use for similarity computation.
         Only used when similarity_type="autoencoder".
+    autoencoder_train_fn : Callable, default: train_autoencoder
+        Function used to train the autoencoder. Must have the same signature as
+        train_autoencoder. Only used when similarity_type="autoencoder".
     similarity_threshold : float, default: 0.4
         Minimum similarity threshold for considering unit pairs as merge candidates.
     retrain_autoencoder : bool, default: False
-        If True, trains a new autoencoder even if model_path exists.
+        If True, trains a new autoencoder even if a saved model exists at model_path.
         Only used when similarity_type="autoencoder".
     model_path : str or None, default: None
-        Path to a saved autoencoder model. If provided and exists, loads the model
-        instead of training a new one (unless retrain_autoencoder=True).
+        Path to save/load a trained autoencoder model. If provided and the file exists,
+        loads the saved model instead of training (unless retrain_autoencoder=True).
         Only used when similarity_type="autoencoder".
     correlogram_params : dict[str, Any], default: {"window_ms": 100, "bin_ms": 0.5, "method": "auto"}
-        Parameters for computing cross-correlograms.
+        Parameters for computing cross-correlograms, passed to SpikeInterface.
     maximum_contamination : float, default: 0.15
         Maximum acceptable contamination threshold for refractory period violations.
     similarity_type : str, default: "autoencoder"
         Method for computing similarity: "autoencoder" or "l2".
-    job_kwargs : dict[str, Any], default: {}
-        Additional keyword arguments for parallel job execution.
+    **job_kwargs
+        Additional keyword arguments passed to SpikeInterface parallel job execution.
 
     Returns
     -------
@@ -104,9 +113,8 @@ def compute_slay_merges(
     NotImplementedError
         If an unknown similarity_type is provided.
     """
-    # handle unit filtering
 
-    similarity, ccg_metric, refractory_penalty = compute_slay_metrics(
+    similarity, ccg_metric, refractory_penalty = _compute_slay_metrics(
         sorting_analyzer,
         autoencoder_params,
         autoencoder_architecture,
@@ -160,7 +168,7 @@ def compute_slay_merges(
     return merges, sorting_analyzer, slay_metrics
 
 
-def compute_slay_metrics(
+def _compute_slay_metrics(
     sorting_analyzer,
     autoencoder_params,
     autoencoder_architecture,
@@ -173,6 +181,7 @@ def compute_slay_metrics(
     similarity_type,
     **job_kwargs,
 ):
+    """Compute pairwise similarity, CCG metric, and refractory penalty for all unit pairs."""
     match similarity_type:
         case "autoencoder":
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -261,7 +270,8 @@ def find_merges(
     Find cluster merges based on final metric values.
 
     This function identifies multi-way merges between candidate cluster pairs
-    by ranking pairs by their final metric and ensuring transitivity of merges.
+    by ranking pairs in descending order by their final metric and ensuring transitivity
+    of merges.
 
     Parameters
     ----------
@@ -272,8 +282,9 @@ def find_merges(
         greater merge confidence.
     merge_threshold : float
         Minimum final metric value for considering a merge.
-    max_distance : int, default: 10
-        Maximum distance between peak channels for a merge to be valid.
+    max_distance : int, default: 100
+        Maximum Euclidean distance (in probe units) between peak channel locations
+        for a merge to be considered.
 
     Returns
     -------

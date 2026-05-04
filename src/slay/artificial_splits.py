@@ -18,22 +18,30 @@ def make_artificial_splits(
 
     Only units with >= 1000 spikes are eligible for splitting.
     Each unit can only be split once, and units created from splits
-    cannot be split again.
+    cannot be split again. Split pairs where either resulting unit has
+    SNR < 2, firing rate < 0.1 Hz, or high refractory period violations
+    are discarded.
 
     Parameters
     ----------
     sorting_analyzer : SortingAnalyzer
-        The sorting analyzer containing units to split
+        The sorting analyzer containing units to split.
+    splitting_probability : float
+        Total fraction of units to split. Each of the four split strategies
+        receives an equal share (splitting_probability / 4).
     random_seed : int, default: 0
-        Random seed for reproducibility
+        Random seed for reproducibility.
 
     Returns
     -------
-    new_analyzer : SortingAnalyzer
+    split_analyzer : SortingAnalyzer
         New sorting analyzer with artificial splits applied, using the
-        same recording as the input analyzer
-    all_split_pairs : list of tuple
-        All (original_unit_id, new_unit_id, split_type) tuples from all split types
+        same recording as the input analyzer.
+    split_ids : dict[int, list[int]]
+        Maps each original unit ID to the two new unit IDs created by its split.
+    split_types : dict[int, str]
+        Maps each original unit ID to the split strategy used
+        ("burst", "amplitude", "drift", or "random").
     """
     splittable_ids = []
     for unit_id in sorting_analyzer.unit_ids:
@@ -83,6 +91,7 @@ def make_artificial_splits(
 
 
 def _create_splits(sorting_analyzer, all_split_indices):
+    """Assign new unit IDs to split indices and return a new SortingAnalyzer with the splits applied."""
     splits = {}
     new_id = max(sorting_analyzer.unit_ids) + 1
     for original_id in all_split_indices.keys():
@@ -103,6 +112,7 @@ def _create_splits(sorting_analyzer, all_split_indices):
 
 
 def get_invalid_splits(split_analyzer, split_ids, max_id):
+    """Return original unit IDs whose splits produced at least one low-quality unit (low SNR, low firing rate, or high refractory violations)."""
     quality_metrics = compute_quality_metrics(
         split_analyzer, metric_names=["snr", "firing_rate"]
     )
