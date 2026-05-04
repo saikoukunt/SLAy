@@ -1,96 +1,172 @@
-# Spike-sorting Lapse Amelioration System (SLAy) <!-- omit from toc -->
-- [Running SLAy](#running-slay)
-  - [Setting default parameters](#setting-default-parameters)
-  - [Option 1: Run from a python script (recommended)](#option-1-run-from-a-python-script-recommended)
-  - [Option 2: Run from the command line](#option-2-run-from-the-command-line)
-- [Installation Instructions](#installation-instructions)
-- [Citing](#citing)
+# SLAy: slay oversplitting errors in your spike sorting
+
+Manually merging spike sorted units is time-consuming, subjective, and lacks reproducibility. SLAy uses quantitative metrics to automatically identify oversplit units, which can then be merged automatically or reviewed further manually. Specifically, we developed a novel metrics for **(1)** calculating waveform similarity using an autoencoder, and **(2)** capturing structure in cross-correlograms. When used with automatic unit quality labelling (e.g., via [SpikeInterface](https://github.com/SpikeInterface/spikeinterface) or [BombCell](https://github.com/Julie-Fabre/Bombcell)), SLAy can fully automate the manual curation process, making it feasible to quickly process many single- or multi- probe ephys recordings. Read our [paper](https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1) to learn more about SLAy.
+
+## Installation
+We recommend using [uv](https://docs.astral.sh/uv/) to install SLAy. If you want to use your GPU to train SLAy's autoencoder, which is recommended, you will also need CUDA (if on an NVIDIA GPU) and the GPU version of pytorch. The instructions below show how to install pytorch for CUDA 12.6, but you should modify it to match your CUDA version.
+
+### uv (recommended)
+0. Install CUDA if you don't already have it.
+1. Install pytorch for GPU following the instructions [here](https://docs.astral.sh/uv/guides/integration/pytorch/#using-a-pytorch-index).
+1. Install SLAy: 
+    ```shell
+    uv add slay
+    ```
+
+### pip + conda (slower)
+0. Install CUDA if you don't already have it.
+1. Create a new conda environment.
+    ```shell
+    conda create -n slay python=3.11
+    conda activate slay
+
+    # optional but highly recommended, for GPU autoencoder training
+    pip install torch --index-url https://download.pytorch.org/whl/cu126
+    ```
+
+2. Install SLAy.
+
+    ``` shell
+    pip install slay
+    ```
 
 
+## (Prerequisite) SpikeInterface SortingAnalyzer
 
-## Running SLAy
-
-### Setting default parameters
-[`slay/schemas.py`](./slay/schemas.py) contains the names and descriptions of all parameters, and their default values can be changed there (or parameters may be passed in when calling the `run_slay` function). The default parameters work pretty well across a variety of brain regions and animal models, but you can adjust the defaults for your own preferences. Some parameters you may want to change are:
-
-- `'auto_accept_merges'` : If True, all the suggested merges will be automatically accepted and the KS files (`spike_clusters.npy`) will be overwritten. If False, the merges will be plotted in the `{ks_dir}/automerge/merges` folder. **Defaults to False**.
-
-- `'good_lbls'`: The quality labels in `cluster_group.tsv` of the clusters that should be considered for merging. **Defaults to `["good"]`.**
-
-- `'max_viol'`: Acceptable cross-correlogram (CCG) refractory period violations as a proportion of baseline CCG event rate. **Defaults to 0.15.**
-
-- `'xcorr_coeff'`: Coefficient applied to cross-correlation metric for final metric calculation. Decrease this if you want merging to rely more on waveform similarity and less on CCG shape. **Defaults to 0.25.**
-
-- `'ref_pen_coeff'`: Coefficient applied to refractory period violation penalty for final metric calculation. Decrease this if you want merging to be more lenient on cluster pairs with refractory period violations. **Defaults to 1.**
-
-- `'final_thresh'`: Threshold on the final metric (between 0 and 1) to decide whether to merge a cluster pair. **The default value of 0.5** works well, but increase (decrease) it if you want less (more) merge suggestions. Would highly recommend turning off `auto_accept_merges` if you decrease the final threshold.
-
-If you don't want to edit the default parameters, you can also pass in parameters for each recording you run, either through a python dictionary or the command line (see below).
-
-
-### Option 1: Run from a python script (recommended)
-
-To run SLAy from a python script, you can call `slay.run.main()` and pass in a dictionary containing the `'KS_folder'` (this is the folder containing params.py for Phy), and any non-default parameters you want to set.\
-For example, in the snippet below from [`scripts/auto_slay.py`](./scripts/auto_slay.py), we set the `plot_merges`, `max_spikes`, and `auto_accept_merges` parameters and run SLAy on all KS4-sorted recordings in the `data_dir` folder:
+### Create a SortingAnalyzer
+To ensure compatibility with any recording hardware and spike sorter, SLAy operates on SpikeInterface's `SortingAnalyzer`. If your pipeline already uses SpikeInterface for preprocessing and sorting, you can create a `SortingAnalyzer` like this:
 
 ```python
-import os
-
-import slay
-
-if __name__ == "__main__":
-    merge_params = {
-        "plot_merges": True,
-        "max_spikes": 500,
-        "auto_accept_merges": False,
-    }
-
-    data_dir = "D:/SLAY_data/"
-
-    # Automatically finds all KS 4 folders in the data directory
-    for root, dirs, files in os.walk(data_dir):
-        for dir_name in dirs:
-            if "ks4" in dir_name:
-                ks_dir = os.path.join(root, dir_name)
-                print(ks_dir)
-                slay.run_slay({"KS_folder": ks_dir, **merge_params})
+sorting_analyzer = si.create_sorting_analyzer(
+    sorting, 
+    recording_preprocessed,
+    format="binary_folder",         # change if desired
+    folder="/my_sorting_analyzer",
+    **job_kwargs
+)
 ```
 
-### Option 2: Run from the command line
+Otherwise, you can use SpikeInterface's `read_XXX` functions (see a [full list](https://spikeinterface.readthedocs.io/en/stable/modules/extractors.html#compatible-formats)) to load in your *pre-processed* recording and spike sorter output. For example, to load in a SpikeGLX recording processed with CatGT and sorted with Kilosort:
 
-You can also run SLAy from the command line by passing in the path to the KS_folder with the flag `--KS_folder`, and any non-default parameters with the flag `--{parameter name}`. For example,
+```python
+import spikeinterface.full as si
 
-```bash
-python slay/run.py --KS_folder path/to/ks/folder --max_spikes 500
+recording_preprocessed = si.read_spikeglx(
+    recording_folder,
+    stream_id="imec0.ap"    
+)
+sorting = si.read_kilosort(kilosort_folder)
+
+sorting_analyzer = si.create_sorting_analyzer(
+    sorting, 
+    recording_preprocessed,
+    format="binary_folder",         # change if desired
+    folder="/my_sorting_analyzer",
+    **job_kwargs
+)
 ```
 
-## Installation Instructions
-If you want to run SLAy as a standalone tool, use the installation instructions below.
+### Compute extensions
+SLAy's metrics rely on your `SortingAnalyzer` to access spike waveforms and cross-correlograms. SLAy will use your `SortingAnalyzer` to compute these automatically if they are not already present, but we recommend precomputing them for use in other processing steps and so SLAy runs faster:
 
-1. Create a new conda environment
-   ```bash
-   conda create -n slay python=3.10
-   conda activate slay
-   ```
-1. Install packages
-   ```bash
-    conda install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia
-    conda install scipy argparse numpy pandas scikit-learn matplotlib
-    pip install cupy-cuda12x marshmallow
-    ```
-1. Install SLAy
-   ```bash
-   *navigate to desired folder*
-   git clone https://github.com/saikoukunt/SLAy.git
-   cd slay
-   pip install -e .
-   ```
+```python
+job_kwargs = dict(n_jobs=-1, progress_bar=True, chunk_duration="1s")
+
+sorting_analyzer.compute("random_spikes", method="uniform", max_spikes_per_unit=500)
+sorting_analyzer.compute("waveforms", **job_kwargs)
+sorting_analyzer.compute("templates", **job_kwargs)
+
+sorting_analyzer.compute("correlograms", window_ms=100, bin_ms=2.) # change to match your brain region/animal model
+
+sorting_analyzer.compute("quality_metrics", metric_names=["snr", "firing_rate"])
+```
+
+### Remove noise and multi-units
+To avoid extra computations, you should give SLAy a `SortingAnalyzer` that does not contain noise or multi-units. This can be done with `si.select_units()`.
+
+
+## Using SLAy
+
+You do not need a pre-trained autoencoder to run SLAy. To run SLAy with autoencoder-based similarity and automatic parameter selection:
+
+```python
+from slay import compute_slay_merges
+
+merges, sorting_analyzer, slay_metrics = compute_slay_merges(
+    sorting_analyzer,
+    model_path="save/path/for/autoencoder.pt",
+)
+```
+This will extract spike snippets from your recording, train and save the autoencoder, compute the SLAy merge metrics, and output a list of suggested merges. By default, SLAy will automatically select the appropriate parameters (metric coefficients and merge threshold) for your recording. You can use SpikeInterface to merge the suggestions:
+
+```python
+merged_sorting_analyzer = sorting_analyzer.merge_units(
+    merges,
+    censor_ms=5/30000,      # remove duplicate spikes
+    format="binary_folder",
+    folder="/my_merged_sorting_analyzer"
+)
+```
+
+or review them manually in [SpikeInterface-GUI](https://github.com/SpikeInterface/spikeinterface-gui) or [Phy](https://github.com/cortex-lab/phy).
+
+
+### Manual parameter selection
+You can specify manual parameters through the `merge_parameters` argument. You must specify a dictionary with values for "k1" (coefficient for CCG structure metric), "k2" (coefficient for refractory period penalty), and "merge_threshold". Below is a reasonable starting point for manual adjustment:
+
+```python
+merges, sorting_analyzer, slay_metrics = compute_slay_merges(
+    sorting_analyzer,
+    merge_parameters={"k1": 0.25, "k2": 1, "merge_threshold": 0.5},
+    model_path="save/path/for/autoencoder.pt",
+)
+```
+
+### L2 waveform similarity
+If you don't want to use autoencoder-based waveform similarity (e.g., if you don't have a GPU and CPU-training would be too slow), you can run SLAy with a simpler measure of waveform similarity:
+
+```python
+merges, sorting_analyzer, slay_metrics = compute_slay_merges(
+    sorting_analyzer,
+    model_path="save/path/for/autoencoder.pt",
+    similarity_type="l2"
+)
+```
+
+We found that the L2 similarity performs similarly to the autoencoder for some recordings, but has false positives and negatives for others (see [paper](https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1) to learn more about SLAy).
+
+### Directly through SpikeInterface
+If you do not want to use autoencoder-based waveform similarity or automatic parameter selection, you can run an L2-similarity version of SLAy directly through SpikeInterface:
+
+```python
+from spikeinterface.curation import compute_merge_unit_groups
+
+merges = compute_merge_unit_groups(
+    sorting_analyzer, 
+    preset="slay",
+    steps_params={"slay_score": {"k1": 0.25, "k2": 1.0, "slay_threshold": 0.5}}
+)
+
+
+
+```
+
+
+### Advanced
+
+#### Use a custom autoencoder architecture or training
+Under construction!
+
+#### Train an autoencoder with spikes from multiple recordings
+Under construction!
+
+
+
+## Questions/Issues
+This codebase is in beta --- if you have questions or run into any errors, open a GitHub issue or [shoot me an email](mailto:sai.koukunt@gmail.com)!
 
 ## Citing
 If you use SLAy in your own work, please cite our paper!
 
 > S. Koukuntla, T. Deweese, A. Cheng, R. Mildren, A. Lawrence, A. Graves, K.E. Cullen, J. Colonell, T.D. Harris, and A.S. Charles. SLAy-ing errors in high-density electrophysiology spike sorting. *bioRxiv*, doi: 10.1101/2025.06.20.660590., 2025 [https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1](https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1).
-
-
-
 
