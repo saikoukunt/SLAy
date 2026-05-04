@@ -10,12 +10,10 @@ Manually merging spike sorted units is time-consuming, subjective, and lacks rep
   - [Compute extensions](#compute-extensions)
   - [Remove noise and multi-units](#remove-noise-and-multi-units)
 - [Using SLAy](#using-slay)
-  - [Manual parameter selection](#manual-parameter-selection)
-  - [L2 waveform similarity](#l2-waveform-similarity)
-  - [Directly through SpikeInterface](#directly-through-spikeinterface)
-  - [Advanced](#advanced)
-    - [Use a custom autoencoder architecture or training](#use-a-custom-autoencoder-architecture-or-training)
-    - [Train an autoencoder with spikes from multiple recordings](#train-an-autoencoder-with-spikes-from-multiple-recordings)
+  - [(default) with autoencoder and automatic parameter selection](#default-with-autoencoder-and-automatic-parameter-selection)
+  - [with manual parameter selection](#with-manual-parameter-selection)
+  - [with L2 waveform similarity](#with-l2-waveform-similarity)
+  - [directly through SpikeInterface](#directly-through-spikeinterface)
 - [Questions/Issues](#questionsissues)
 - [Citing](#citing)
 
@@ -107,6 +105,7 @@ To avoid extra computations, you should give SLAy a `SortingAnalyzer` that does 
 
 ## Using SLAy
 
+### (default) with autoencoder and automatic parameter selection
 You do not need a pre-trained autoencoder to run SLAy. To run SLAy with autoencoder-based similarity and automatic parameter selection:
 
 ```python
@@ -133,7 +132,7 @@ or review them manually in [SpikeInterface-GUI](https://github.com/SpikeInterfac
 > Note: If you have a pretrained model, you can point `model_path` to the `.pt` file and SLAy will automatically use it! SLAy's autoencoder usually trains in under 10 minutes, but if you are processing many recordings from the same animal with the same site map, you can save time by reusing the same autoencoder.
 
 
-### Manual parameter selection
+### with manual parameter selection
 
 If you want manual control over SLAy's parameters,  you can specify custom parameters through the `merge_parameters` argument. You must specify a dictionary with values for "k1" (coefficient for CCG structure metric), "k2" (coefficient for refractory period penalty), and "merge_threshold". Below is a reasonable starting point for manual adjustment:
 
@@ -145,7 +144,7 @@ merges, sorting_analyzer, slay_metrics = compute_slay_merges(
 )
 ```
 
-### L2 waveform similarity
+### with L2 waveform similarity
 If you don't want to use autoencoder-based waveform similarity (e.g., if you don't have a GPU and CPU-training would be too slow), you can run SLAy with a simpler measure of waveform similarity:
 
 ```python
@@ -158,7 +157,7 @@ merges, sorting_analyzer, slay_metrics = compute_slay_merges(
 
 We found that the L2 similarity performs similarly to the autoencoder for some recordings, but has false positives and negatives for others (see [paper](https://www.biorxiv.org/content/10.1101/2025.06.20.660590v1) to learn more about SLAy).
 
-### Directly through SpikeInterface
+### directly through SpikeInterface
 If you do not want to use autoencoder-based waveform similarity or automatic parameter selection, you can run an L2-similarity version of SLAy directly through SpikeInterface:
 
 ```python
@@ -178,15 +177,14 @@ merged_sorting_analyzer = sorting_analyzer.merge_units(
 )
 ```
 
-### Advanced
-
-#### Use a custom autoencoder architecture or training
-Under construction!
+<!-- ### Advanced
 
 #### Train an autoencoder with spikes from multiple recordings
 Under construction!
 
 
+#### Use a custom autoencoder architecture or training function
+Under construction! -->
 
 ## Questions/Issues
 This codebase is in beta --- if you have questions or run into any errors, open a GitHub issue or [shoot me an email](mailto:sai.koukunt@gmail.com)!
