@@ -1,27 +1,23 @@
-from slay.run import run_slay
-from slay.algo import run_merge
-from slay.autoencoder import CN_AE, SpikeDataset, generate_train_data, train_ae
-from slay.bursts import base_algo, find_bursts
-from slay.cluster_metrics import calc_wf_norms, wf_means_similarity
-from slay.plot import plot_merges
-from slay.stages import (
-    accept_all_merges,
-    calc_ae_sim,
-    calc_ref_p,
-    calc_xcorr_metric,
-    merge_clusters,
+from slay.algorithm import (
+    compute_slay_merges as compute_slay_merges,
+    find_merges as find_merges,
 )
-from slay.utils import (
-    find_best_channels,
-    get_dists,
-    load_ks_files,
-    parse_cmd_line_args,
-    parse_kilosort_params,
-    spikes_per_cluster,
-    find_times_multi,
-    calc_mean_wf,
-    extract_spikes,
-    _sliding_RP_viol,
+from slay.artificial_splits import (
+    make_artificial_splits as make_artificial_splits,
 )
-from slay.schemas import OutputParams, RunParams
-from slay.xcorr import bin_spike_trains, calc_xcorr_sig, x_correlogram, auto_correlogram
+from slay.autoencoder import (
+    AE as AE,
+    SpikeDataset as SpikeDataset,
+    compute_autoencoder_similarity as compute_autoencoder_similarity,
+    extract_spike_snippets as extract_spike_snippets,
+    train_autoencoder as train_autoencoder,
+)
+from slay.bursts import base_algo as base_algo, find_bursts as find_bursts
+from slay.metrics import (
+    compute_ccg_metric as compute_ccg_metric,
+    compute_refractory_penalty as compute_refractory_penalty,
+    compute_final_metric as compute_final_metric,
+)
+from slay.autoselect_params import (
+    autoselect_merge_parameters as autoselect_merge_parameters,
+)
