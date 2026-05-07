@@ -71,7 +71,7 @@ recording_preprocessed = si.read_spikeglx(
     recording_folder,
     stream_id="imec0.ap"    
 )
-sorting = si.read_kilosort(kilosort_folder)
+sorting = si.read_phy(phy_folder, exclude_cluster_groups=["noise", "mua"])
 
 sorting_analyzer = si.create_sorting_analyzer(
     sorting, 
@@ -92,7 +92,7 @@ sorting_analyzer.compute("random_spikes", method="uniform", max_spikes_per_unit=
 sorting_analyzer.compute("waveforms", **job_kwargs)
 sorting_analyzer.compute("templates", **job_kwargs)
 
-sorting_analyzer.compute("correlograms", window_ms=100, bin_ms=2.) # change to match your brain region/animal model
+sorting_analyzer.compute("correlograms", window_ms=100, bin_ms=1.) # change to match your brain region/animal model, we recommend <= 2 ms and >= 0.5 ms
 
 sorting_analyzer.compute("quality_metrics", metric_names=["snr", "firing_rate"])
 ```

@@ -3,7 +3,6 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from spikeinterface.core import SortingAnalyzer
-from torch import nn
 
 from .algorithm import find_merges, _compute_slay_metrics
 from .artificial_splits import make_artificial_splits
