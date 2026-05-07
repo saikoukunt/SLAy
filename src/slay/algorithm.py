@@ -35,11 +35,7 @@ def compute_slay_merges(
     similarity_threshold: float = 0.4,
     retrain_autoencoder: bool = False,
     model_path: str | None = None,
-    correlogram_params: dict[str, Any] = {
-        "window_ms": 100,
-        "bin_ms": 0.5,
-        "method": "auto",
-    },
+    correlogram_params: dict[str, Any] = None,
     maximum_contamination: float = 0.15,
     similarity_type: str = "autoencoder",
     **job_kwargs: dict[str, Any],
@@ -85,9 +81,10 @@ def compute_slay_merges(
     model_path : str or None, default: None
         Path to save/load a trained autoencoder model. If provided and the file exists,
         loads the saved model instead of training (unless retrain_autoencoder=True).
-        Only used when similarity_type="autoencoder".
-    correlogram_params : dict[str, Any], default: {"window_ms": 100, "bin_ms": 0.5, "method": "auto"}
-        Parameters for computing cross-correlograms, passed to SpikeInterface.
+        Required when similarity_type="autoencoder".
+    correlogram_params : dict[str, Any], default: None
+        Parameters for computing cross-correlograms, passed to SpikeInterface. If None,
+        parameters will be extracted from the SortingAnalyzer correlograms extension.
     maximum_contamination : float, default: 0.15
         Maximum acceptable contamination threshold for refractory period violations.
     similarity_type : str, default: "autoencoder"
@@ -111,20 +108,13 @@ def compute_slay_merges(
     Raises
     ------
     ValueError
-        If similarity_type="autoencoder" and merge_parameters="auto" but model_path
-        is not provided.
+        If similarity_type="autoencoder" and model_path is not provided.
     NotImplementedError
         If an unknown similarity_type is provided.
     """
-    if (
-        merge_parameters == "auto"
-        and similarity_type == "autoencoder"
-        and model_path is None
-    ):
+    if similarity_type == "autoencoder" and model_path is None:
         raise ValueError(
-            "model_path must be provided when similarity_type='autoencoder' and "
-            "merge_parameters='auto' so the trained model can be reused during "
-            "parameter selection."
+            "model_path must be provided when similarity_type='autoencoder'"
         )
 
     similarity, ccg_metric, refractory_penalty = _compute_slay_metrics(
@@ -246,6 +236,13 @@ def _compute_slay_metrics(
     pair_mask = similarity >= similarity_threshold
 
     correlogram_extension = sorting_analyzer.get_extension("correlograms")
+    if (correlogram_params is None) and (correlogram_extension is None):
+        raise ValueError(
+            "correlogram_params must be provided if SortingAnalyzer does not have the correlograms extension!"
+        )
+    elif correlogram_params is None:
+        correlogram_params = correlogram_extension.params
+
     if (
         correlogram_extension is None
         or correlogram_extension.params["window_ms"] != correlogram_params["window_ms"]
