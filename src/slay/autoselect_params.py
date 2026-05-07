@@ -27,11 +27,7 @@ def autoselect_merge_parameters(
     },
     model_path: str = None,
     similarity_threshold: float = 0.4,
-    correlogram_params: dict[str, Any] = {
-        "window_ms": 100,
-        "bin_ms": 0.5,
-        "method": "auto",
-    },
+    correlogram_params: dict[str, Any] = None,
     maximum_contamination: float = 0.15,
     parameter_combinations: NDArray[np.floating] = None,
     random_seed=0,
@@ -63,7 +59,7 @@ def autoselect_merge_parameters(
         Path to a saved autoencoder model to load. Only used when similarity_type="autoencoder".
     similarity_threshold : float, default: 0.4
         Minimum similarity threshold for considering unit pairs as merge candidates.
-    correlogram_params : dict[str, Any], default: {"window_ms": 100, "bin_ms": 0.5, "method": "auto"}
+    correlogram_params : dict[str, Any], default: None
         Parameters for computing cross-correlograms, passed to SpikeInterface.
     maximum_contamination : float, default: 0.15
         Maximum acceptable contamination threshold for refractory period violations.
