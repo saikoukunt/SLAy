@@ -121,7 +121,7 @@ This will extract spike snippets from your recording, train and save the autoenc
 ```python
 merged_sorting_analyzer = sorting_analyzer.merge_units(
     merges,
-    censor_ms=5/30000,      # remove duplicate spikes
+    censor_ms=5/30      # remove duplicate spikes
     format="binary_folder",
     folder="/my_merged_sorting_analyzer"
 )
