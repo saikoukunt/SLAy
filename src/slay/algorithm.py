@@ -12,6 +12,7 @@ from spikeinterface.postprocessing import compute_template_similarity
 from .autoencoder import (
     AE,
     compute_autoencoder_similarity,
+    compute_pc_similarity,
     extract_spike_snippets,
     train_autoencoder,
 )
@@ -42,6 +43,8 @@ def compute_slay_merges(
     },
     maximum_contamination: float = 0.15,
     similarity_type: str = "autoencoder",
+    autoencoder_seed: int = 0,
+    artificial_split_seed: int = 0,
     **job_kwargs: dict[str, Any],
 ) -> tuple[list[list[int]], SortingAnalyzer, dict[str, NDArray[np.floating]]]:
     """
@@ -117,6 +120,7 @@ def compute_slay_merges(
         correlogram_params,
         maximum_contamination,
         similarity_type,
+        autoencoder_seed,
         **job_kwargs,
     )
 
@@ -133,6 +137,7 @@ def compute_slay_merges(
             similarity_threshold,
             correlogram_params,
             maximum_contamination,
+            random_seed=artificial_split_seed,
         )
 
         tqdm.tqdm.write(f"Automatically selected parameters {merge_parameters}")
@@ -155,6 +160,7 @@ def compute_slay_merges(
         "ccg_metric": ccg_metric,
         "refractory_penalty": refractory_penalty,
         "final_metric": final_metric,
+        "merge_parameters": merge_parameters,
     }
 
     return merges, sorting_analyzer, slay_metrics
@@ -171,6 +177,7 @@ def compute_slay_metrics(
     correlogram_params,
     maximum_contamination,
     similarity_type,
+    autoencoder_seed=None,
     **job_kwargs,
 ):
     match similarity_type:
@@ -190,8 +197,9 @@ def compute_slay_metrics(
                 spike_snippets, unit_ids = extract_spike_snippets(
                     sorting_analyzer, autoencoder_params
                 )
+                spike_snippets = torch.Tensor(spike_snippets).to(device)
                 autoencoder, spike_dataset = autoencoder_train_fn(
-                    spike_snippets, unit_ids, autoencoder
+                    spike_snippets, unit_ids, autoencoder, seed=autoencoder_seed
                 )
                 if model_path is not None:
                     torch.save(autoencoder.state_dict(), model_path)
@@ -216,6 +224,14 @@ def compute_slay_metrics(
                 )
             else:
                 similarity = similarity_extension.get_data()
+
+        case "pca":
+            spike_snippets, unit_ids = extract_spike_snippets(
+                sorting_analyzer, autoencoder_params
+            )
+            similarity = compute_pc_similarity(
+                sorting_analyzer, None, autoencoder_params
+            )
 
         case _:
             raise NotImplementedError(f"Unknown similarity_type: {similarity_type}")

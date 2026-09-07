@@ -7,6 +7,7 @@ import torch.nn as nn
 from numpy.typing import NDArray
 from scipy.sparse import lil_array
 from scipy.sparse.csgraph import dijkstra
+from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import NearestNeighbors
 from spikeinterface.core import SortingAnalyzer, get_template_extremum_channel
@@ -138,7 +139,7 @@ def extract_spike_snippets(
 
         snip_idx += n_spikes_unit
 
-    return torch.Tensor(spikes).to(device), spike_labels
+    return spikes, spike_labels
 
 
 class SpikeDataset(Dataset):
@@ -220,11 +221,12 @@ def train_autoencoder(
     spikes: torch.Tensor,
     cl_ids: NDArray[np.int_],
     model: nn.Module,
-    num_epochs: int = 25,
+    num_epochs: int = 50,
     lr: float = 1e-4,
     batch_size: int = 128,
     return_inds=False,
     verbose=True,
+    seed=42,
 ):
     """
     Creates and trains an autoencoder on the given spike dataset.
@@ -251,10 +253,11 @@ def train_autoencoder(
         spk_data (SpikeDataset): Dataset containing snippets used for training.
     """
     device, spk_data, train_indices, test_indices, train_loader, test_loader = (
-        _create_dataloaders(spikes, cl_ids, batch_size)
+        _create_dataloaders(spikes, cl_ids, batch_size, seed)
     )
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    print(f"Seed is {seed}")
 
     for epoch in tqdm(range(num_epochs), desc="Epoch"):
         model.train()
@@ -296,6 +299,30 @@ def train_autoencoder(
         return model, spk_data
 
 
+def compute_pc_similarity(
+    sorting_analyzer: SortingAnalyzer,
+    spike_dataset: SpikeDataset = None,
+    autoencoder_params: dict[str, Any] = {
+        "num_chan": 8,
+    },
+    zDim=15,
+):
+    if spike_dataset is None:
+        spike_snippets, spike_labels = extract_spike_snippets(
+            sorting_analyzer, autoencoder_params
+        )
+        spike_dataset = SpikeDataset(spike_snippets, spike_labels)
+
+    unit_ids = sorting_analyzer.unit_ids
+
+    spike_pca = PCA(n_components=zDim)
+    spike_latents = spike_pca.fit_transform(spike_snippets)
+
+    return _latent_cluster_similarity(
+        spike_latents, spike_labels, sorting_analyzer, unit_ids, zDim
+    )
+
+
 def compute_autoencoder_similarity(
     sorting_analyzer: SortingAnalyzer,
     autoencoder: nn.Module,
@@ -322,23 +349,13 @@ def compute_autoencoder_similarity(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if spike_dataset is None:
-        spike_snippets, unit_ids = extract_spike_snippets(
+        spike_snippets, spike_labels = extract_spike_snippets(
             sorting_analyzer, autoencoder_params
         )
-        spike_dataset = SpikeDataset(spike_snippets, unit_ids)
+        spike_snippets = torch.Tensor(spike_snippets).to(device)
+        spike_dataset = SpikeDataset(spike_snippets, spike_labels)
 
-    # Get templates and peak channels from sorting analyzer
-    templates_ext = sorting_analyzer.get_extension("templates")
-    if templates_ext is None:
-        raise ValueError("SortingAnalyzer must have 'templates' extension computed.")
-
-    templates = templates_ext.get_templates()
     unit_ids = sorting_analyzer.unit_ids
-    n_units = len(unit_ids)
-
-    peak_chans = get_template_extremum_channel(
-        sorting_analyzer, peak_sign="both", outputs="index"
-    )
 
     # Calculate latent representations of spikes
     dataloader = DataLoader(spike_dataset, batch_size=128)
@@ -363,6 +380,25 @@ def compute_autoencoder_similarity(
 
     tqdm.write(f"\nAverage Loss: {loss / len(dataloader):.4f}")
 
+    return _latent_cluster_similarity(
+        spike_latents, spike_labels, sorting_analyzer, unit_ids, zDim
+    )
+
+
+def _latent_cluster_similarity(
+    spike_latents, spike_labels, sorting_analyzer, unit_ids, zDim
+):
+    # Get templates and peak channels from sorting analyzer
+    templates_ext = sorting_analyzer.get_extension("templates")
+    if templates_ext is None:
+        raise ValueError("SortingAnalyzer must have 'templates' extension computed.")
+    templates = templates_ext.get_templates()
+
+    n_units = len(unit_ids)
+    peak_chans = get_template_extremum_channel(
+        sorting_analyzer, peak_sign="both", outputs="index"
+    )
+
     # Calculate cluster centroids (mean latent representation for each unit)
     unit_centroids = np.zeros((n_units, zDim))
     unit_spreads = np.zeros(n_units)
@@ -379,10 +415,10 @@ def compute_autoencoder_similarity(
 
     # Calculate similarity -- ref_dist is scaled to 0.6 similarity
     ref_dists = unit_spreads[:, None] + unit_spreads[None, :]
-    autoencoder_similarity = np.exp(-centroid_distances / (2 * ref_dists))
+    similarity = np.exp(-centroid_distances / (2 * ref_dists))
 
     # Zero out self-similarity
-    np.fill_diagonal(autoencoder_similarity, 0)
+    np.fill_diagonal(similarity, 0)
 
     # Penalize pairs with different peak channels
     amplitudes = np.max(templates, 1) - np.min(templates, 1)
@@ -401,7 +437,7 @@ def compute_autoencoder_similarity(
                 or (amplitudes[j, unit_i_peak_chan] == 0)
                 or (amplitudes[j, unit_j_peak_chan] == 0)
             ):
-                autoencoder_similarity[i, j] = 0
+                similarity[i, j] = 0
                 continue
             else:
                 decay_pen_raw = np.sqrt(
@@ -411,13 +447,13 @@ def compute_autoencoder_similarity(
                     / amplitudes[j, unit_j_peak_chan]
                 )
 
-            autoencoder_similarity[i, j] *= decay_pen_raw
-            autoencoder_similarity[j, i] = autoencoder_similarity[i, j]
+            similarity[i, j] *= decay_pen_raw
+            similarity[j, i] = similarity[i, j]
 
-    return autoencoder_similarity
+    return similarity
 
 
-def _create_dataloaders(spikes, cl_ids, batch_size):
+def _create_dataloaders(spikes, cl_ids, batch_size, seed):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     labels = cl_ids
@@ -427,7 +463,7 @@ def _create_dataloaders(spikes, cl_ids, batch_size):
         labels,
         stratify=labels,
         test_size=0.2,
-        random_state=42,
+        random_state=seed,
     )
     train_labels, train_counts = np.unique(labels[train_indices], return_counts=True)
     test_labels, test_counts = np.unique(labels[test_indices], return_counts=True)
