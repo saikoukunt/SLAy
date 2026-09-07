@@ -94,16 +94,6 @@ def make_artificial_splits(
 
 def _create_splits(sorting_analyzer, all_split_indices):
     """Assign new unit IDs to split indices and return a new SortingAnalyzer with the splits applied."""
-    # splits = {}
-    # new_id = max(sorting_analyzer.unit_ids) + 1
-    # for original_id in all_split_indices.keys():
-    #     splits[int(original_id)] = [
-    #         int(new_id),
-    #         int(new_id) + 1,
-    #         all_split_indices[int(original_id)][2],
-    #     ]
-    #     new_id += 2
-
     new_ids = generate_unit_ids_for_split(
         sorting_analyzer.unit_ids,
         {key: [value[0], value[1]] for key, value in all_split_indices.items()},

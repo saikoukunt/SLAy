@@ -163,16 +163,16 @@ wheels = [
 
 [[package]]
 name = "neo"
-version = "0.14.3"
+version = "0.14.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "packaging" },
     { name = "quantities" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/74/2906034ce92f7fb76dac5f095dcbb2b061f55b1f6eda53fc45335c1689e2/neo-0.14.3.tar.gz", hash = "sha256:50d473fb9070d1728ec6fd72bdad16262b40f7c99df7ff5e8d927ebc2680b080", size = 5076523, upload-time = "2025-10-13T12:11:59.036Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/ee/168b94170399e21d68cba4efb79f532e81b2cb3ce747d642d95370da8882/neo-0.14.5.tar.gz", hash = "sha256:5485668c5ab4fc9e384e5e645edc9e560987374d24ba8b53665b7a93cd4dcd37", size = 5101786, upload-time = "2026-06-25T09:08:40.76Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/a1/670f8b8f92f175a109c175afb78d9ea22df7e10248b77f509e78212ad5b0/neo-0.14.3-py3-none-any.whl", hash = "sha256:65ad4c4e8e5df19a530b706c7cc51a4fff55aa56969a2b76ee0daefbcfadd04e", size = 688564, upload-time = "2025-10-13T12:11:57.34Z" },
+    { url = "https://files.pythonhosted.org/packages/88/c0/7d482249c9678902b7cef16b7262d91d2fe7492010f170149ad3abfeee87/neo-0.14.5-py3-none-any.whl", hash = "sha256:2b54b5617ff08852486244974c462a892414d3581c3b0eaa8c3e1f9a000dba44", size = 712507, upload-time = "2026-06-25T09:08:38.921Z" },
 ]
 
 [[package]]
@@ -421,16 +421,16 @@ wheels = [
 
 [[package]]
 name = "probeinterface"
-version = "0.3.1"
+version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "packaging" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f9/0c/27361de1adf1b21a15f1e0612ce08b3003e07f02a8f1a5467cc53d994878/probeinterface-0.3.1.tar.gz", hash = "sha256:e036412bac4608569ddd61403d8408548715f6d3d03af2a68c344426b1a5668c", size = 6543357, upload-time = "2025-11-03T15:47:19.677Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/b6/149976dac9228c39a80fd1dee1743b3ba8e878b8c425df4304a7ac395aa1/probeinterface-0.3.2.tar.gz", hash = "sha256:8cf02afb1f344be027e1f29e7a2c54fd35b38573ad77890fc5076f957ddf3db5", size = 6681139, upload-time = "2026-03-20T16:06:09.401Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/4b/0be7d87196652020fc1aac8ec6ffc9ea875f1a7fb94b8d3f08cbe933d0a2/probeinterface-0.3.1-py3-none-any.whl", hash = "sha256:8b2ed199c3337cf97b5fdba0778798e2cb1acee9b4f466179b37ca9d7bdba261", size = 62286, upload-time = "2025-11-03T15:47:18.14Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/c9/7cd477fa3cc6e31b643c1ca8d13a7b398fa8c2b6a9c5926cab916729cf43/probeinterface-0.3.2-py3-none-any.whl", hash = "sha256:f288d013697a73836384a9ee8db6bc979764814b981b6730d463d3bd04d5f317", size = 68822, upload-time = "2026-03-20T16:06:08.059Z" },
 ]
 
 [[package]]
@@ -583,7 +583,7 @@ wheels = [
 
 [[package]]
 name = "slay"
-version = "0.1.0"
+version = "0.1.0a0"
 source = { editable = "." }
 dependencies = [
     { name = "joblib" },
@@ -604,7 +604,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "scipy", specifier = ">=1.15.3" },
-    { name = "spikeinterface", specifier = ">=0.103.2" },
+    { name = "spikeinterface", specifier = ">=0.104.0" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=2.9.0" },
     { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = ">=2.9.0", index = "https://download.pytorch.org/whl/cu126" },
     { name = "tqdm", specifier = ">=4.67.1" },
@@ -612,7 +612,7 @@ requires-dist = [
 
 [[package]]
 name = "spikeinterface"
-version = "0.103.2"
+version = "0.104.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "neo" },
@@ -625,9 +625,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "zarr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fa/a9/91b08624640dd71b1024fd991af10e1d8e26c0b57020d54e77d3ca70e137/spikeinterface-0.103.2.tar.gz", hash = "sha256:827be06b427fbf3b166742e723f7e4034543698a5b45dd932fb5dd857f09a2f1", size = 843242, upload-time = "2025-12-03T15:32:08.776Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/bf/d039a0ba89e529f1406c8ec94a79f24f21e896bc78c3c3632202a19807b7/spikeinterface-0.104.8.tar.gz", hash = "sha256:ebd5b3ff19066c795ab7c424a7c06bbc3a312e59807c01647821d3c68b00b24b", size = 907430, upload-time = "2026-06-30T13:49:39.972Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/80/b120deb3084262beeb89c43929ab19aa34287bea8e670498ff4124fb0d98/spikeinterface-0.103.2-py3-none-any.whl", hash = "sha256:03d7d87bf2bad750bbced8c162940269e06d5bdbc766156d5e9acecfd072e0b1", size = 1059286, upload-time = "2025-12-03T15:32:07.115Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/83/cd37e77b850628353069f2f82cd9402fe286bd397b22bdf7095f566d359e/spikeinterface-0.104.8-py3-none-any.whl", hash = "sha256:e99a9b3c4e87b9ce33eef6d262c96a57af38efdb25b2cbae3719126009a979ae", size = 1129221, upload-time = "2026-06-30T13:49:38.251Z" },
 ]
 
 [[package]]
