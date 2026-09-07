@@ -3,8 +3,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from spikeinterface.core import SortingAnalyzer
+from tqdm import tqdm
 
-from .algorithm import find_merges, _compute_slay_metrics
+from .algorithm import _compute_slay_metrics, find_merges
 from .artificial_splits import make_artificial_splits
 from .autoencoder import (
     AE,
@@ -13,7 +14,6 @@ from .autoencoder import (
 from .metrics import (
     compute_final_metric,
 )
-from tqdm import tqdm
 
 
 def autoselect_merge_parameters(

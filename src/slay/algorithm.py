@@ -35,7 +35,7 @@ def compute_slay_merges(
     similarity_threshold: float = 0.4,
     retrain_autoencoder: bool = False,
     model_path: str | None = None,
-    correlogram_params: dict[str, Any] = None,
+    correlogram_params: dict[str, Any] = {},
     maximum_contamination: float = 0.15,
     similarity_type: str = "autoencoder",
     **job_kwargs: dict[str, Any],
@@ -134,6 +134,9 @@ def compute_slay_merges(
     if merge_parameters == "auto":
         from .autoselect_params import autoselect_merge_parameters
 
+        # noise_levels is required for parameter autoselection
+        if not sorting_analyzer.has_extension("noise_levels"):
+            sorting_analyzer.compute("noise_levels")
         merge_parameters, _, _, _, _ = autoselect_merge_parameters(
             sorting_analyzer,
             splitting_probability,
@@ -236,12 +239,12 @@ def _compute_slay_metrics(
     pair_mask = similarity >= similarity_threshold
 
     correlogram_extension = sorting_analyzer.get_extension("correlograms")
-    if (correlogram_params is None) and (correlogram_extension is None):
+    if (not correlogram_params) and (correlogram_extension is None):
         raise ValueError(
             "correlogram_params must be provided if SortingAnalyzer does not have the correlograms extension!"
         )
-    elif correlogram_params is None:
-        correlogram_params = correlogram_extension.params
+    elif correlogram_extension is not None:
+        correlogram_params = {**correlogram_extension.params, **correlogram_params}
 
     if (
         correlogram_extension is None
@@ -276,7 +279,7 @@ def find_merges(
     final_metric: NDArray[np.floating],
     merge_threshold: float,
     max_distance: int = 100,
-) -> list[list[int]]:
+) -> list[list[Any]]:
     """
     Find cluster merges based on final metric values.
 
@@ -299,8 +302,9 @@ def find_merges(
 
     Returns
     -------
-    merges : list[list[int]]
-        List of merge groups, where each group is a list of unit IDs to merge together.
+    merges : list[list[Any]]
+        List of merge groups, where each group is a list of unit IDs (matching the
+        dtype of `sorting_analyzer.unit_ids`, e.g. int or str) to merge together.
     """
     unit_ids = sorting_analyzer.unit_ids
 
@@ -387,4 +391,4 @@ def find_merges(
             del merge_groups[merge_id]
 
     # convert unit indices to unit IDs
-    return [[int(unit_ids[idx]) for idx in group] for group in merge_groups.values()]
+    return [[unit_ids[idx].item() for idx in group] for group in merge_groups.values()]
