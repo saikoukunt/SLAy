@@ -14,6 +14,8 @@ from .autoencoder import (
     compute_autoencoder_similarity,
     extract_spike_snippets,
     train_autoencoder,
+    compute_snippet_size,
+    SpikeDataset,
 )
 from .metrics import (
     compute_ccg_metric,
@@ -28,7 +30,7 @@ def compute_slay_merges(
     splitting_probability: float = 0.4,
     max_distance: int = 100,
     autoencoder_params: dict[str, Any] = {
-        "num_chan": 8,
+        "num_channels": 8,
     },
     autoencoder_architecture: type = AE,
     autoencoder_train_fn: Callable = train_autoencoder,
@@ -197,20 +199,28 @@ def _compute_slay_metrics(
     match similarity_type:
         case "autoencoder":
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            num_samples_before, num_samples_after, num_samples, num_channels = (
+                compute_snippet_size(sorting_analyzer, autoencoder_params)
+            )
+            autoencoder = autoencoder_architecture(
+                num_chan=num_channels, num_samples=num_samples
+            ).to(device)
+            spike_snippets, unit_ids = extract_spike_snippets(
+                sorting_analyzer,
+                num_samples_before,
+                num_samples_after,
+                num_samples,
+                num_channels,
+            )
 
             if (
                 not retrain_autoencoder
                 and model_path is not None
                 and os.path.exists(model_path)
             ):
-                autoencoder = autoencoder_architecture().to(device)
                 autoencoder.load_state_dict(torch.load(model_path, map_location=device))
-                spike_dataset = None
+                spike_dataset = SpikeDataset(spike_snippets, unit_ids)
             else:
-                autoencoder = autoencoder_architecture().to(device)
-                spike_snippets, unit_ids = extract_spike_snippets(
-                    sorting_analyzer, autoencoder_params
-                )
                 autoencoder, spike_dataset = autoencoder_train_fn(
                     spike_snippets, unit_ids, autoencoder
                 )

@@ -15,7 +15,10 @@ from .utils import get_channels_by_distance
 
 def extract_spike_snippets(
     sorting_analyzer: SortingAnalyzer,
-    autoencoder_params: dict[str, Any],
+    num_samples_before: int,
+    num_samples_after: int,
+    num_samples_total: int,
+    num_channels_in_snippet: int,
 ) -> tuple[torch.Tensor, NDArray[np.int_]]:
     """
     Extracts spike snippets from a SpikeInterface SortingAnalyzer for training
@@ -62,15 +65,7 @@ def extract_spike_snippets(
     # Get recording, sorting, and templates
     recording = sorting_analyzer.recording
     unit_ids_list = sorting_analyzer.unit_ids
-
-    # Calculate timing parameters
-    sampling_frequency = recording.get_sampling_frequency()
-    ms_before = autoencoder_params.get("ms_before", 1 / 3)
-    ms_after = autoencoder_params.get("ms_after", 1.0)
-    num_samples_before = int(ms_before * sampling_frequency / 1000)
-    num_samples_after = int(ms_after * sampling_frequency / 1000)
     last_sample = sorting_analyzer.recording.get_total_samples()
-    num_samples = num_samples_before + num_samples_after
 
     # Pre-compute the set of closest channels for each unit ordered by distance from peak and the total number of snippets
     chans = {}
@@ -86,7 +81,7 @@ def extract_spike_snippets(
         chans[unit_idx] = get_channels_by_distance(
             peak_chans[unit_ids_list[unit_idx]],
             sorting_analyzer,
-            autoencoder_params["num_chan"],
+            num_channels_in_snippet,
         )
 
         num_spikes = np.sum(
@@ -98,7 +93,7 @@ def extract_spike_snippets(
     spikes = np.zeros(
         (
             num_snippets,
-            autoencoder_params["num_chan"] * num_samples,
+            num_channels_in_snippet * num_samples_total,
         ),
         dtype=np.float32,
     )
@@ -115,7 +110,7 @@ def extract_spike_snippets(
 
         # Extract waveforms for all spikes
         snippets = np.zeros(
-            (n_spikes_unit, autoencoder_params["num_chan"] * num_samples)
+            (n_spikes_unit, num_channels_in_snippet * num_samples_total)
         )
 
         for i, spike_time in enumerate(spike_times):
@@ -196,7 +191,7 @@ class AE(nn.Module):
         self,
         zDim: int = 15,
         num_chan: int = 8,
-        num_samp: int = 40,
+        num_samples: int = 40,
         n_units_l1: int = 600,
         n_units_l2: int = 300,
     ):
@@ -204,7 +199,7 @@ class AE(nn.Module):
         self.encoder = nn.Sequential()
         self.decoder = nn.Sequential()
 
-        self.encoder.append(nn.Linear(num_chan * num_samp, n_units_l1))
+        self.encoder.append(nn.Linear(num_chan * num_samples, n_units_l1))
         self.encoder.append(nn.GELU())
         self.encoder.append(nn.Linear(n_units_l1, n_units_l2))
         self.encoder.append(nn.GELU())
@@ -215,7 +210,7 @@ class AE(nn.Module):
         self.decoder.append(nn.GELU())
         self.decoder.append(nn.Linear(n_units_l2, n_units_l1))
         self.decoder.append(nn.GELU())
-        self.decoder.append(nn.Linear(n_units_l1, num_chan * num_samp))
+        self.decoder.append(nn.Linear(n_units_l1, num_chan * num_samples))
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         return self.encoder(x)
@@ -479,3 +474,20 @@ def _create_dataloaders(spikes, cl_ids, batch_size):
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, sampler=test_sampler)
     return device, train_dataset, train_indices, test_indices, train_loader, test_loader
+
+
+def compute_snippet_size(analyzer: SortingAnalyzer, autoencoder_params: dict):
+    recording = analyzer.recording
+    sampling_frequency = max(recording.get_sampling_frequency(), 15000)
+    ms_before = autoencoder_params.get("ms_before", 1 / 3)
+    ms_after = autoencoder_params.get("ms_after", 1.0)
+    num_samples_before = round(ms_before * sampling_frequency / 1000)
+    num_samples_after = round(ms_after * sampling_frequency / 1000)
+    num_samples = num_samples_before + num_samples_after
+
+    return (
+        num_samples_before,
+        num_samples_after,
+        num_samples,
+        autoencoder_params["num_channels"],
+    )
