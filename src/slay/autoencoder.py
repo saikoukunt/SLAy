@@ -51,9 +51,9 @@ def extract_spike_snippets(
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Get required extensions
     templates_ext = sorting_analyzer.get_extension("templates")
     random_spikes_ext = sorting_analyzer.get_extension("random_spikes")
+    waveforms_ext = sorting_analyzer.get_extension("waveforms")
 
     if templates_ext is None:
         raise ValueError("SortingAnalyzer must have 'templates' extension computed.")
@@ -61,75 +61,46 @@ def extract_spike_snippets(
         raise ValueError(
             "SortingAnalyzer must have 'random_spikes' extension computed."
         )
+    if waveforms_ext is None:
+        raise ValueError("SortingAnalyzer must have 'waveforms' extension computed.")
 
-    # Get recording, sorting, and templates
-    recording = sorting_analyzer.recording
     unit_ids_list = sorting_analyzer.unit_ids
-    last_sample = sorting_analyzer.recording.get_total_samples()
-
-    # Pre-compute the set of closest channels for each unit ordered by distance from peak and the total number of snippets
-    chans = {}
     peak_chans = get_template_extremum_channel(
         sorting_analyzer, peak_sign="both", outputs="index"
     )
-    num_snippets = 0
-    random_spikes = random_spikes_ext.get_random_spikes()
-    spikes_in_bounds = (random_spikes["sample_index"] >= num_samples_before) & (
-        random_spikes["sample_index"] <= last_sample - num_samples_after - 1
+    sampling_frequency = sorting_analyzer.recording.get_sampling_frequency()
+    spike_time_idx = round(
+        waveforms_ext.params["ms_before"] * sampling_frequency / 1000
     )
-    for unit_idx in range(len(unit_ids_list)):
-        chans[unit_idx] = get_channels_by_distance(
+
+    spikes = []
+    spike_labels = []
+    for unit_idx in tqdm(range(len(unit_ids_list)), desc="Extracting snippets"):
+        desired_channels = get_channels_by_distance(
             peak_chans[unit_ids_list[unit_idx]],
             sorting_analyzer,
             num_channels_in_snippet,
         )
-
-        num_spikes = np.sum(
-            (random_spikes["unit_index"] == unit_idx) & spikes_in_bounds
-        )
-        num_snippets += num_spikes
-
-    # Pre-allocate memory for the snippets
-    spikes = np.zeros(
-        (
-            num_snippets,
-            num_channels_in_snippet * num_samples_total,
-        ),
-        dtype=np.float32,
-    )
-    spike_labels = np.zeros(num_snippets, dtype="int32")
-
-    # Extract waveforms from recording traces for each unit
-    snip_idx = 0
-    for unit_idx in tqdm(range(len(unit_ids_list)), desc="Extracting snippets"):
-        spike_times = random_spikes["sample_index"][
-            (random_spikes["unit_index"] == unit_idx) & spikes_in_bounds
+        analyzer_channels = sorting_analyzer.sparsity.unit_id_to_channel_ids[
+            unit_ids_list[unit_idx]
         ]
-        desired_channels = chans[unit_idx]
-        n_spikes_unit = len(spike_times)
+        sorter = np.argsort(analyzer_channels)
+        idx = sorter[
+            np.searchsorted(analyzer_channels, desired_channels, sorter=sorter)
+        ]
 
-        # Extract waveforms for all spikes
-        snippets = np.zeros(
-            (n_spikes_unit, num_channels_in_snippet * num_samples_total)
-        )
+        snippets = waveforms_ext.get_waveforms_one_unit(unit_ids_list[unit_idx])
+        snippets = snippets[
+            :,
+            spike_time_idx - num_samples_before : spike_time_idx + num_samples_after,
+            idx,
+        ]
+        spikes.append(snippets)
+        spike_labels.append(np.array([unit_idx] * snippets.shape[0]))
 
-        for i, spike_time in enumerate(spike_times):
-            start_frame = int(spike_time - num_samples_before)
-            end_frame = int(spike_time + num_samples_after)
-
-            snippets[i] = recording.get_traces(
-                start_frame=start_frame,
-                end_frame=end_frame,
-                channel_ids=desired_channels,
-                return_in_uV=False,
-            ).flatten()
-
-        # Store unit labels and waveforms
-        spike_labels[snip_idx : snip_idx + n_spikes_unit] = unit_idx
-        spikes[snip_idx : snip_idx + n_spikes_unit, :] = snippets
-
-        snip_idx += n_spikes_unit
-
+    spikes = np.concatenate(spikes)
+    spikes = spikes.reshape(spikes.shape[0], -1)
+    spike_labels = np.concatenate(spike_labels)
     return torch.Tensor(spikes).to(device), spike_labels
 
 
@@ -478,7 +449,7 @@ def _create_dataloaders(spikes, cl_ids, batch_size):
 
 def compute_snippet_size(analyzer: SortingAnalyzer, autoencoder_params: dict):
     recording = analyzer.recording
-    sampling_frequency = max(recording.get_sampling_frequency(), 15000)
+    sampling_frequency = recording.get_sampling_frequency()
     ms_before = autoencoder_params.get("ms_before", 1 / 3)
     ms_after = autoencoder_params.get("ms_after", 1.0)
     num_samples_before = round(ms_before * sampling_frequency / 1000)

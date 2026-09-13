@@ -1,6 +1,7 @@
 import os
 from collections import deque
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import torch
@@ -11,11 +12,11 @@ from spikeinterface.postprocessing import compute_template_similarity
 
 from .autoencoder import (
     AE,
+    SpikeDataset,
     compute_autoencoder_similarity,
+    compute_snippet_size,
     extract_spike_snippets,
     train_autoencoder,
-    compute_snippet_size,
-    SpikeDataset,
 )
 from .metrics import (
     compute_ccg_metric,
