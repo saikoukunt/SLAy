@@ -72,31 +72,59 @@ def extract_spike_snippets(
     spike_time_idx = round(
         waveforms_ext.params["ms_before"] * sampling_frequency / 1000
     )
+    num_timepoints = num_samples_before + num_samples_after
 
     spikes = []
     spike_labels = []
+    skipped_units = []
+
     for unit_idx in tqdm(range(len(unit_ids_list)), desc="Extracting snippets"):
-        desired_channels = get_channels_by_distance(
-            peak_chans[unit_ids_list[unit_idx]],
+        unit_id = unit_ids_list[unit_idx]
+        if sorting_analyzer.sparsity is not None:
+            analyzer_channels = sorting_analyzer.sparsity.unit_id_to_channel_ids[
+                unit_ids_list[unit_idx]
+            ]
+        else:
+            analyzer_channels = sorting_analyzer.channel_ids
+        selected_channels = get_channels_by_distance(
+            peak_chans[unit_id],
             sorting_analyzer,
             num_channels_in_snippet,
+            available_channels=analyzer_channels,
         )
-        analyzer_channels = sorting_analyzer.sparsity.unit_id_to_channel_ids[
-            unit_ids_list[unit_idx]
-        ]
-        sorter = np.argsort(analyzer_channels)
-        idx = sorter[
-            np.searchsorted(analyzer_channels, desired_channels, sorter=sorter)
-        ]
 
-        snippets = waveforms_ext.get_waveforms_one_unit(unit_ids_list[unit_idx])
+        # Check if we have enough channels
+        if len(selected_channels) < num_channels_in_snippet:
+            skipped_units.append(unit_id)
+            continue
+
+        # Get indices of selected channels in analyzer_channels
+        idx = np.array(
+            [np.where(analyzer_channels == ch)[0][0] for ch in selected_channels]
+        )
+
+        snippets = waveforms_ext.get_waveforms_one_unit(unit_id)
         snippets = snippets[
             :,
             spike_time_idx - num_samples_before : spike_time_idx + num_samples_after,
             idx,
         ]
+
+        # Verify shape
+        if (
+            snippets.shape[1] != num_timepoints
+            or snippets.shape[2] != num_channels_in_snippet
+        ):
+            skipped_units.append(unit_id)
+            continue
+
         spikes.append(snippets)
         spike_labels.append(np.array([unit_idx] * snippets.shape[0]))
+
+    if skipped_units:
+        print(
+            f"Warning: Skipped {len(skipped_units)} units with insufficient channels: {skipped_units}"
+        )
 
     spikes = np.concatenate(spikes)
     spikes = spikes.reshape(spikes.shape[0], -1)
