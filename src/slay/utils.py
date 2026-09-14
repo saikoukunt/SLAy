@@ -41,6 +41,7 @@ def get_channels_by_distance(
     peak_channel: int,
     sorting_analyzer: SortingAnalyzer,
     num_chan: int,
+    available_channels: NDArray[np.int_] | None = None,
 ) -> NDArray[np.int_]:
     """
     Finds the num_chan channels closest to a given peak channel, ordered by distance.
@@ -50,21 +51,30 @@ def get_channels_by_distance(
         sorting_analyzer (SortingAnalyzer): SpikeInterface SortingAnalyzer containing
             the recording with channel position information.
         num_chan (int): The number of closest channels to return.
+        available_channels (NDArray | None): If provided, only return channels from
+            this set. Useful when sparsity limits which channels have waveform data.
 
     Returns:
         ordered_chans (NDArray): Channel IDs ordered by distance from peak,
             with peak channel first.
     """
     channel_pos = sorting_analyzer.recording.get_channel_locations()
-    close_chans: NDArray[np.int_] = get_closest_channels(
-        channel_pos, peak_channel, num_chan
-    )
+    channel_ids = sorting_analyzer.recording.channel_ids
 
-    # Calculate distances and sort channels by distance
+    # Calculate distances from peak channel
     x: NDArray[np.float64] = channel_pos[:, 0]
     y: NDArray[np.float64] = channel_pos[:, 1]
     x0, y0 = channel_pos[peak_channel]
     dists: NDArray[np.float64] = (x - x0) ** 2 + (y - y0) ** 2
-    dists_subset = dists[close_chans]
 
-    return sorting_analyzer.recording.channel_ids[close_chans[np.argsort(dists_subset)]]
+    # Sort all channels by distance
+    sorted_indices = np.argsort(dists)
+    sorted_channel_ids = channel_ids[sorted_indices]
+
+    # Filter to available channels if specified
+    if available_channels is not None:
+        sorted_channel_ids = np.array(
+            [ch for ch in sorted_channel_ids if ch in available_channels]
+        )
+
+    return sorted_channel_ids[:num_chan]
